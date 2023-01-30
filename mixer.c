@@ -1,11 +1,11 @@
 #include <stddef.h>
 #include <string.h>
 
-#include "../clowncommon/clowncommon.h"
+#include "clownmdemu/clowncommon/clowncommon.h"
 
 #define CLOWNRESAMPLER_IMPLEMENTATION
 #define CLOWNRESAMPLER_STATIC
-#include "libraries/clownresampler/clownresampler.h"
+#include "clownresampler/clownresampler.h"
 
 #define MIXER_FM_CHANNEL_COUNT 2
 #define MIXER_PSG_CHANNEL_COUNT 1

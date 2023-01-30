@@ -2,7 +2,7 @@
 	path = frontend/libraries/SDL
 	url = https://github.com/libsdl-org/SDL.git
 [submodule "frontend/clownresampler"]
-	path = frontend/libraries/clownresampler
+	path = clownresampler
 	url = https://github.com/Clownacy/clownresampler.git
 [submodule "frontend/freetype"]
 	path = frontend/libraries/freetype
@@ -20,3 +20,6 @@
 [submodule "clown68000"]
 	path = clown68000
 	url = https://github.com/Clownacy/clown68000
+[submodule "clownmdemu"]
+	path = clownmdemu
+	url = https://github.com/Clownacy/clownmdemu

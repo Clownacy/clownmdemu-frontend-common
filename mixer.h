@@ -3,12 +3,12 @@
 
 #include <stddef.h>
 
-#include "../clowncommon/clowncommon.h"
+#include "clownmdemu/clowncommon/clowncommon.h"
 
 #define CLOWNRESAMPLER_STATIC
-#include "libraries/clownresampler/clownresampler.h"
+#include "clownresampler/clownresampler.h"
 
-#include "../clownmdemu.h"
+#include "clownmdemu/clownmdemu.h"
 
 #define MIXER_FM_CHANNEL_COUNT 2
 #define MIXER_PSG_CHANNEL_COUNT 1
