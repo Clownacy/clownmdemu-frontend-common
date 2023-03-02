@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stddef.h>
 #include <string.h>
 
@@ -21,12 +22,13 @@ typedef struct Mixer_Constant
 
 typedef struct Mixer_State
 {
-	cc_s16l fm_input_buffer[MIXER_FM_CHANNEL_COUNT * CC_MAX(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC), CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_PAL))];
+	/* The '+1' is just a lazy way of performing a rough ceiling division. */
+	cc_s16l fm_input_buffer[MIXER_FM_CHANNEL_COUNT * (1 + CC_MAX(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC), CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_PAL)))];
 	size_t fm_input_buffer_write_index;
 	size_t fm_input_buffer_read_index;
 	ClownResampler_HighLevel_State fm_resampler;
 
-	cc_s16l psg_input_buffer[MIXER_PSG_CHANNEL_COUNT * CC_MAX(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC), CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_PAL))];
+	cc_s16l psg_input_buffer[MIXER_PSG_CHANNEL_COUNT * (1 + CC_MAX(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC), CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_PAL)))];
 	size_t psg_input_buffer_write_index;
 	size_t psg_input_buffer_read_index;
 	ClownResampler_HighLevel_State psg_resampler;
@@ -137,6 +139,8 @@ static cc_s16l* Mixer_AllocateFMSamples(const Mixer *mixer, size_t total_frames)
 
 	mixer->state->fm_input_buffer_write_index += total_frames * MIXER_FM_CHANNEL_COUNT;
 
+	assert(mixer->state->fm_input_buffer_write_index <= CC_COUNT_OF(mixer->state->fm_input_buffer));
+
 	return allocated_samples;
 }
 
@@ -145,6 +149,8 @@ static cc_s16l* Mixer_AllocatePSGSamples(const Mixer *mixer, size_t total_frames
 	cc_s16l* const allocated_samples = &mixer->state->psg_input_buffer[mixer->state->psg_input_buffer_write_index];
 
 	mixer->state->psg_input_buffer_write_index += total_frames * MIXER_PSG_CHANNEL_COUNT;
+
+	assert(mixer->state->psg_input_buffer_write_index <= CC_COUNT_OF(mixer->state->psg_input_buffer));
 
 	return allocated_samples;
 }
