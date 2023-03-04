@@ -12,7 +12,7 @@
 #define MIXER_PSG_CHANNEL_COUNT 1
 
 #ifndef MIXER_FORMAT
-#error "You need to define MIXER_FORMAT before including `mixer.c`."
+#error "You need to define MIXER_FORMAT before including `mixer.h`."
 #endif
 
 typedef struct Mixer_Constant
