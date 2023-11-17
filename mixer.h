@@ -3,8 +3,11 @@
 #include <string.h>
 
 #include "clownmdemu/clowncommon/clowncommon.h"
+#include "clownmdemu/clownmdemu.h"
 
-#define CLOWNRESAMPLER_IMPLEMENTATION
+#ifndef MIXER_HEADER
+#define MIXER_HEADER
+
 #define CLOWNRESAMPLER_STATIC
 #include "clownresampler/clownresampler.h"
 
@@ -42,6 +45,14 @@ typedef struct Mixer
 	const Mixer_Constant *constant;
 	Mixer_State *state;
 } Mixer;
+
+#endif /* MIXER_HEADER */
+
+#ifdef MIXER_IMPLEMENTATION
+
+#define CLOWNRESAMPLER_IMPLEMENTATION
+#define CLOWNRESAMPLER_STATIC
+#include "clownresampler/clownresampler.h"
 
 static size_t FMResamplerInputCallback(const void *user_data, cc_s16l *buffer, size_t buffer_size)
 {
@@ -186,3 +197,5 @@ static void Mixer_End(const Mixer *mixer, void (*callback)(const void *user_data
 		/* If the resampler has run out of data, then we're free to exit this loop. */
 	} while (frames_to_output == CC_COUNT_OF(mixer->state->output_buffer) / MIXER_FM_CHANNEL_COUNT);
 }
+
+#endif /* MIXER_IMPLEMENTATION */
