@@ -120,19 +120,32 @@ static void Mixer_Constant_Initialise(Mixer_Constant *constant)
 	ClownResampler_Precompute(&constant->resampler_precomputed);
 }
 
-static void Mixer_State_Initialise(Mixer_State *state, cc_u32f sample_rate, cc_bool pal_mode, cc_bool low_pass_filter)
+static void Mixer_State_Initialise(Mixer_State *state, cc_u32f output_sample_rate, float emulator_frame_rate, cc_bool pal_mode, cc_bool low_pass_filter)
 {
-	/* Divide and multiply by the frame rate to try to make the sample rate closer to the emulator's output. */
-	const cc_u32f pal_fm_sample_rate = CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_PAL));
-	const cc_u32f ntsc_fm_sample_rate = CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC));
+	cc_u32f in_fm_sample_rate, in_psg_sample_rate;
 
-	const cc_u32f pal_psg_sample_rate = CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_PAL));
-	const cc_u32f ntsc_psg_sample_rate = CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC));
+	if (pal_mode)
+	{
+		/* Divide and multiply by the frame rate to try to make the sample rate closer to the emulator's output. */
+		const cc_u32f pal_fm_sample_rate = CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_PAL));
+		const cc_u32f pal_psg_sample_rate = CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_PAL));
 
-	const cc_u32f low_pass_filter_sample_rate = low_pass_filter ? 22000 : sample_rate;
+		in_fm_sample_rate = CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(pal_fm_sample_rate * emulator_frame_rate);
+		in_psg_sample_rate = CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(pal_psg_sample_rate * emulator_frame_rate);
+	}
+	else
+	{
+		const cc_u32f ntsc_fm_sample_rate = CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC));
+		const cc_u32f ntsc_psg_sample_rate = CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC));
 
-	ClownResampler_HighLevel_Init(&state->fm_resampler, MIXER_FM_CHANNEL_COUNT, pal_mode ? pal_fm_sample_rate : ntsc_fm_sample_rate, sample_rate, low_pass_filter_sample_rate);
-	ClownResampler_HighLevel_Init(&state->psg_resampler, MIXER_PSG_CHANNEL_COUNT, pal_mode ? pal_psg_sample_rate : ntsc_psg_sample_rate, sample_rate, low_pass_filter_sample_rate);
+		in_fm_sample_rate = CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(ntsc_fm_sample_rate * emulator_frame_rate);
+		in_psg_sample_rate = CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(ntsc_psg_sample_rate * emulator_frame_rate);
+	}
+
+	const cc_u32f low_pass_filter_sample_rate = low_pass_filter ? 22000 : output_sample_rate;
+
+	ClownResampler_HighLevel_Init(&state->fm_resampler, MIXER_FM_CHANNEL_COUNT, in_fm_sample_rate, output_sample_rate, low_pass_filter_sample_rate);
+	ClownResampler_HighLevel_Init(&state->psg_resampler, MIXER_PSG_CHANNEL_COUNT, in_psg_sample_rate, output_sample_rate, low_pass_filter_sample_rate);
 }
 
 static void Mixer_Begin(const Mixer *mixer)
