@@ -125,10 +125,8 @@ static void Mixer_Constant_Initialise(Mixer_Constant *constant)
 	ClownResampler_Precompute(&constant->resampler_precomputed);
 }
 
-static void Mixer_State_Initialise(Mixer_State *state, cc_u32f output_sample_rate, float emulator_frame_rate, cc_bool pal_mode, cc_bool low_pass_filter)
+static void Mixer_State_Initialise(Mixer_State *state, cc_u32f output_sample_rate, cc_bool pal_mode, cc_bool low_pass_filter)
 {
-	(void)emulator_frame_rate; // TODO: Kill this!
-
 	state->fm_sample_rate = pal_mode
 		? CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_PAL))
 		: CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC));
