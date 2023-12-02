@@ -211,7 +211,7 @@ static cc_u32f Mixer_MulDiv(const cc_u32f a, const cc_u32f b, const cc_u32f c)
 }
 
 /* TODO: Namespace these! */
-static size_t FMResamplerInputCallback(void *user_data, cc_s16l *buffer, size_t buffer_size)
+static size_t Mixer_FMResamplerInputCallback(void *user_data, cc_s16l *buffer, size_t buffer_size)
 {
 	const Mixer* const mixer = (const Mixer*)user_data;
 
@@ -224,7 +224,7 @@ static size_t FMResamplerInputCallback(void *user_data, cc_s16l *buffer, size_t 
 	return frames_to_do;
 }
 
-static size_t PSGResamplerInputCallback(void *user_data, cc_s16l *buffer, size_t buffer_size)
+static size_t Mixer_PSGResamplerInputCallback(void *user_data, cc_s16l *buffer, size_t buffer_size)
 {
 	const Mixer* const mixer = (const Mixer*)user_data;
 
@@ -240,7 +240,7 @@ static size_t PSGResamplerInputCallback(void *user_data, cc_s16l *buffer, size_t
 /* There is no need for clamping in either of these callbacks because the
    samples are output low enough to never exceed the 16-bit limit. */
 
-static cc_bool FMResamplerOutputCallback(void *user_data, const cc_s32f *frame, cc_u8f channels)
+static cc_bool Mixer_FMResamplerOutputCallback(void *user_data, const cc_s32f *frame, cc_u8f channels)
 {
 	const Mixer* const mixer = (const Mixer*)user_data;
 
@@ -255,7 +255,7 @@ static cc_bool FMResamplerOutputCallback(void *user_data, const cc_s32f *frame, 
 	return mixer->state->output_buffer_pointer != &mixer->state->output_buffer[CC_COUNT_OF(mixer->state->output_buffer)];
 }
 
-static cc_bool PSGResamplerOutputCallback(void *user_data, const cc_s32f *frame, cc_u8f channels)
+static cc_bool Mixer_PSGResamplerOutputCallback(void *user_data, const cc_s32f *frame, cc_u8f channels)
 {
 	const Mixer* const mixer = (const Mixer*)user_data;
 	const MIXER_FORMAT sample = (MIXER_FORMAT)*frame;
@@ -345,11 +345,11 @@ static void Mixer_End(const Mixer *mixer, cc_u32f numerator, cc_u32f denominator
 
 		/* Resample the FM and PSG outputs and mix them together into a single buffer. */
 		mixer->state->output_buffer_pointer = mixer->state->output_buffer;
-		ClownResampler_HighLevel_Resample(&mixer->state->fm_resampler, &mixer->constant->resampler_precomputed, FMResamplerInputCallback, FMResamplerOutputCallback, mixer);
+		ClownResampler_HighLevel_Resample(&mixer->state->fm_resampler, &mixer->constant->resampler_precomputed, Mixer_FMResamplerInputCallback, Mixer_FMResamplerOutputCallback, mixer);
 		total_resampled_fm_frames = (mixer->state->output_buffer_pointer - mixer->state->output_buffer) / MIXER_FM_CHANNEL_COUNT;
 
 		mixer->state->output_buffer_pointer = mixer->state->output_buffer;
-		ClownResampler_HighLevel_Resample(&mixer->state->psg_resampler, &mixer->constant->resampler_precomputed, PSGResamplerInputCallback, PSGResamplerOutputCallback, mixer);
+		ClownResampler_HighLevel_Resample(&mixer->state->psg_resampler, &mixer->constant->resampler_precomputed, Mixer_PSGResamplerInputCallback, Mixer_PSGResamplerOutputCallback, mixer);
 		total_resampled_psg_frames = (mixer->state->output_buffer_pointer - mixer->state->output_buffer) / MIXER_FM_CHANNEL_COUNT;
 
 		/* In case there's a mismatch between the number of FM and PSG frames, output the smaller of the two. */
