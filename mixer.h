@@ -69,7 +69,7 @@ typedef struct Mixer_SplitInteger
 	unsigned long splits[3];
 } Mixer_SplitInteger;
 
-static void Mixer_Subtract(Mixer_SplitInteger* const minuend, const Mixer_SplitInteger * const subtrahend)
+static void Mixer_Subtract(Mixer_SplitInteger* const minuend, const Mixer_SplitInteger* const subtrahend)
 {
 	unsigned long carry;
 	unsigned int i;
@@ -89,7 +89,7 @@ static void Mixer_Subtract(Mixer_SplitInteger* const minuend, const Mixer_SplitI
 	}
 }
 
-static cc_bool Mixer_GreaterThan(const Mixer_SplitInteger* const a, const Mixer_SplitInteger * const b)
+static cc_bool Mixer_GreaterThan(const Mixer_SplitInteger* const a, const Mixer_SplitInteger* const b)
 {
 	unsigned int i;
 
@@ -211,7 +211,7 @@ static cc_u32f Mixer_MulDiv(const cc_u32f a, const cc_u32f b, const cc_u32f c)
 }
 
 /* TODO: Namespace these! */
-static size_t Mixer_FMResamplerInputCallback(void *user_data, cc_s16l *buffer, size_t buffer_size)
+static size_t Mixer_FMResamplerInputCallback(void* const user_data, cc_s16l* const buffer, const size_t buffer_size)
 {
 	const Mixer* const mixer = (const Mixer*)user_data;
 
@@ -224,7 +224,7 @@ static size_t Mixer_FMResamplerInputCallback(void *user_data, cc_s16l *buffer, s
 	return frames_to_do;
 }
 
-static size_t Mixer_PSGResamplerInputCallback(void *user_data, cc_s16l *buffer, size_t buffer_size)
+static size_t Mixer_PSGResamplerInputCallback(void* const user_data, cc_s16l* const buffer, const size_t buffer_size)
 {
 	const Mixer* const mixer = (const Mixer*)user_data;
 
@@ -240,22 +240,25 @@ static size_t Mixer_PSGResamplerInputCallback(void *user_data, cc_s16l *buffer, 
 /* There is no need for clamping in either of these callbacks because the
    samples are output low enough to never exceed the 16-bit limit. */
 
-static cc_bool Mixer_FMResamplerOutputCallback(void *user_data, const cc_s32f *frame, cc_u8f channels)
+static cc_bool Mixer_FMResamplerOutputCallback(void* const user_data, const cc_s32f* const frame, const cc_u8f channels)
 {
 	const Mixer* const mixer = (const Mixer*)user_data;
 
 	cc_u8f i;
+	const cc_s32f *frame_pointer;
 
 	(void)channels;
 
 	/* Copy the samples directly into the output buffer. */
+	frame_pointer = frame;
+
 	for (i = 0; i < MIXER_FM_CHANNEL_COUNT; ++i)
-		*mixer->state->output_buffer_pointer++ = (MIXER_FORMAT)*frame++;
+		*mixer->state->output_buffer_pointer++ = (MIXER_FORMAT)*frame_pointer++;
 
 	return mixer->state->output_buffer_pointer != &mixer->state->output_buffer[CC_COUNT_OF(mixer->state->output_buffer)];
 }
 
-static cc_bool Mixer_PSGResamplerOutputCallback(void *user_data, const cc_s32f *frame, cc_u8f channels)
+static cc_bool Mixer_PSGResamplerOutputCallback(void* const user_data, const cc_s32f* const frame, const cc_u8f channels)
 {
 	const Mixer* const mixer = (const Mixer*)user_data;
 	const MIXER_FORMAT sample = (MIXER_FORMAT)*frame;
@@ -271,13 +274,13 @@ static cc_bool Mixer_PSGResamplerOutputCallback(void *user_data, const cc_s32f *
 	return mixer->state->output_buffer_pointer != &mixer->state->output_buffer[CC_COUNT_OF(mixer->state->output_buffer)];
 }
 
-static void Mixer_Constant_Initialise(Mixer_Constant *constant)
+static void Mixer_Constant_Initialise(Mixer_Constant* const constant)
 {
 	/* Compute clownresampler's lookup tables.*/
 	ClownResampler_Precompute(&constant->resampler_precomputed);
 }
 
-static void Mixer_State_Initialise(Mixer_State *state, cc_u32f output_sample_rate, cc_bool pal_mode, cc_bool low_pass_filter)
+static void Mixer_State_Initialise(Mixer_State* const state, const cc_u32f output_sample_rate, const cc_bool pal_mode, const cc_bool low_pass_filter)
 {
 	state->fm_sample_rate = pal_mode
 		? CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_PAL))
@@ -292,7 +295,7 @@ static void Mixer_State_Initialise(Mixer_State *state, cc_u32f output_sample_rat
 	ClownResampler_HighLevel_Init(&state->psg_resampler, MIXER_PSG_CHANNEL_COUNT, state->psg_sample_rate * MIXER_DOWNSAMPLE_CAP, state->output_sample_rate, state->low_pass_filter_sample_rate);
 }
 
-static void Mixer_Begin(const Mixer *mixer)
+static void Mixer_Begin(const Mixer* const mixer)
 {
 	/* Reset the audio buffers so that they can be mixed into. */
 	memset(mixer->state->fm_input_buffer, 0, sizeof(mixer->state->fm_input_buffer));
@@ -301,7 +304,7 @@ static void Mixer_Begin(const Mixer *mixer)
 	mixer->state->psg_input_buffer_write_index = 0;
 }
 
-static cc_s16l* Mixer_AllocateFMSamples(const Mixer *mixer, size_t total_frames)
+static cc_s16l* Mixer_AllocateFMSamples(const Mixer* const mixer, const size_t total_frames)
 {
 	cc_s16l* const allocated_samples = &mixer->state->fm_input_buffer[mixer->state->fm_input_buffer_write_index];
 
@@ -312,7 +315,7 @@ static cc_s16l* Mixer_AllocateFMSamples(const Mixer *mixer, size_t total_frames)
 	return allocated_samples;
 }
 
-static cc_s16l* Mixer_AllocatePSGSamples(const Mixer *mixer, size_t total_frames)
+static cc_s16l* Mixer_AllocatePSGSamples(const Mixer* const mixer, const size_t total_frames)
 {
 	cc_s16l* const allocated_samples = &mixer->state->psg_input_buffer[mixer->state->psg_input_buffer_write_index];
 
@@ -323,7 +326,7 @@ static cc_s16l* Mixer_AllocatePSGSamples(const Mixer *mixer, size_t total_frames
 	return allocated_samples;
 }
 
-static void Mixer_End(const Mixer *mixer, cc_u32f numerator, cc_u32f denominator, void (*callback)(const void *user_data, MIXER_FORMAT *audio_samples, size_t total_frames), const void *user_data)
+static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const cc_u32f denominator, void (* const callback)(const void *user_data, MIXER_FORMAT *audio_samples, size_t total_frames), const void* const user_data)
 {
 	size_t frames_to_output;
 
