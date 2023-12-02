@@ -59,6 +59,158 @@ typedef struct Mixer
 /* See clownresampler's documentation for more information. */
 #define MIXER_DOWNSAMPLE_CAP 4
 
+#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) || (defined(__cplusplus) && __cplusplus >= 201103L)
+#define MIXER_HAS_LONG_LONG
+#endif
+
+#ifndef MIXER_HAS_LONG_LONG
+typedef struct Mixer_SplitInteger
+{
+	unsigned long splits[3];
+} Mixer_SplitInteger;
+
+static void Mixer_Subtract(Mixer_SplitInteger* const minuend, const Mixer_SplitInteger * const subtrahend)
+{
+	unsigned long carry;
+	unsigned int i;
+
+	carry = 0;
+
+	for (i = CC_COUNT_OF(minuend->splits); i-- != 0; )
+	{
+		const unsigned long difference = minuend->splits[i] - subtrahend->splits[i] + carry;
+
+		/* Isolate and sign-extend the overflow to obtain the new carry. */
+		carry = difference >> 16;
+		carry = (carry & 0x7FFF) - (carry & 0x8000);
+
+		/* Store result. */
+		minuend->splits[i] = difference % 0x10000;
+	}
+}
+
+static cc_bool Mixer_GreaterThan(const Mixer_SplitInteger* const a, const Mixer_SplitInteger * const b)
+{
+	unsigned int i;
+
+	for (i = 0; i < CC_COUNT_OF(a->splits); ++i)
+	{
+		if (a->splits[i] > b->splits[i])
+			return cc_true;
+		else if (a->splits[i] < b->splits[i])
+			return cc_false;
+	}
+
+	return cc_false;
+}
+
+static void Mixer_LeftShift(Mixer_SplitInteger* const value)
+{
+	unsigned long carry;
+	unsigned int i;
+
+	carry = 0;
+
+	for (i = CC_COUNT_OF(value->splits); i-- != 0; )
+	{
+		const unsigned long new_carry = value->splits[i] >> 15;
+		value->splits[i] <<= 1;
+		value->splits[i] |= carry;
+		carry = new_carry;
+		value->splits[i] %= 0x10000;
+	}
+}
+
+static void Mixer_RightShift(Mixer_SplitInteger* const value)
+{
+	unsigned long carry;
+	unsigned int i;
+
+	carry = 0;
+
+	for (i = 0; i < CC_COUNT_OF(value->splits); ++i)
+	{
+		const unsigned long new_carry = value->splits[i] << 15;
+		value->splits[i] >>= 1;
+		value->splits[i] |= carry;
+		carry = new_carry;
+		value->splits[i] %= 0x10000;
+	}
+}
+
+static void Mixer_Multiply(Mixer_SplitInteger* const output, const cc_u32f input_a, const cc_u32f input_b)
+{
+	const unsigned long a_upper = input_a / 0x10000;
+	const unsigned long a_lower = input_a % 0x10000;
+	const unsigned long b_upper = input_b / 0x10000;
+	const unsigned long b_lower = input_b % 0x10000;
+
+	output->splits[2] = a_lower * b_lower;
+	output->splits[1] = a_upper * b_lower + a_lower * b_upper;
+	output->splits[0] = a_upper * b_upper;
+
+	output->splits[1] += output->splits[2] / 0x10000;
+	output->splits[0] += output->splits[1] / 0x10000;
+
+	output->splits[2] %= 0x10000;
+	output->splits[1] %= 0x10000;
+	output->splits[0] %= 0x10000;
+}
+
+static cc_u32f Mixer_Divide(Mixer_SplitInteger* const dividend, const cc_u32f divisor_raw)
+{
+	Mixer_SplitInteger divisor;
+	unsigned int shift_amount;
+	unsigned long result;
+
+	divisor.splits[0] = 0;
+	divisor.splits[1] = divisor_raw / 0x10000;
+	divisor.splits[2] = divisor_raw % 0x10000;
+
+	shift_amount = 0;
+
+	while (Mixer_GreaterThan(dividend, &divisor))
+	{
+		Mixer_LeftShift(&divisor);
+		++shift_amount;
+	}
+
+	result = 0;
+
+	for (;;)
+	{
+		do
+		{
+			if (shift_amount == 0)
+				return result;
+
+			Mixer_RightShift(&divisor);
+			--shift_amount;
+
+			result <<= 1;
+		} while (Mixer_GreaterThan(&divisor, dividend));
+
+		do
+		{
+			Mixer_Subtract(dividend, &divisor);
+			++result;
+		} while (!Mixer_GreaterThan(&divisor, dividend));
+	}
+}
+#endif
+
+static cc_u32f Mixer_MulDiv(const cc_u32f a, const cc_u32f b, const cc_u32f c)
+{
+#ifdef MIXER_HAS_LONG_LONG
+	return (unsigned long long)a * b / c;
+#else
+	Mixer_SplitInteger d;
+	Mixer_Multiply(&d, a, b); /* Lit af. */
+	return Mixer_Divide(&d, c);
+#endif
+}
+
+/* TODO: Namespace these! */
 static size_t FMResamplerInputCallback(void *user_data, cc_s16l *buffer, size_t buffer_size)
 {
 	const Mixer* const mixer = (const Mixer*)user_data;
@@ -176,8 +328,8 @@ static void Mixer_End(const Mixer *mixer, cc_u32f numerator, cc_u32f denominator
 	size_t frames_to_output;
 
 	/* Cap the sample rate since the resamplers can only downsample by so much. */
-	const cc_u32f adjusted_fm_sample_rate = CC_MIN(mixer->state->fm_sample_rate * MIXER_DOWNSAMPLE_CAP, mixer->state->fm_sample_rate * numerator / denominator);
-	const cc_u32f adjusted_psg_sample_rate = CC_MIN(mixer->state->psg_sample_rate * MIXER_DOWNSAMPLE_CAP, mixer->state->psg_sample_rate * numerator / denominator);
+	const cc_u32f adjusted_fm_sample_rate = CC_MIN(mixer->state->fm_sample_rate * MIXER_DOWNSAMPLE_CAP, Mixer_MulDiv(mixer->state->fm_sample_rate, numerator, denominator));
+	const cc_u32f adjusted_psg_sample_rate = CC_MIN(mixer->state->psg_sample_rate * MIXER_DOWNSAMPLE_CAP, Mixer_MulDiv(mixer->state->psg_sample_rate, numerator, denominator));
 
 	ClownResampler_HighLevel_Adjust(&mixer->state->fm_resampler, adjusted_fm_sample_rate, mixer->state->output_sample_rate, mixer->state->low_pass_filter_sample_rate);
 	ClownResampler_HighLevel_Adjust(&mixer->state->psg_resampler, adjusted_psg_sample_rate, mixer->state->output_sample_rate, mixer->state->low_pass_filter_sample_rate);
