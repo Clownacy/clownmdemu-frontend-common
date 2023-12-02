@@ -38,6 +38,8 @@ typedef struct Mixer_State
 
 	MIXER_FORMAT output_buffer[0x400 * MIXER_FM_CHANNEL_COUNT];
 	MIXER_FORMAT *output_buffer_pointer;
+
+	cc_u32f fm_sample_rate, psg_sample_rate, low_pass_filter_sample_rate, output_sample_rate;
 } Mixer_State;
 
 typedef struct Mixer
@@ -54,7 +56,10 @@ typedef struct Mixer
 #define CLOWNRESAMPLER_STATIC
 #include "clownresampler/clownresampler.h"
 
-static size_t FMResamplerInputCallback(const void *user_data, cc_s16l *buffer, size_t buffer_size)
+/* See clownresampler's documentation for more information. */
+#define MIXER_DOWNSAMPLE_CAP 4
+
+static size_t FMResamplerInputCallback(void *user_data, cc_s16l *buffer, size_t buffer_size)
 {
 	const Mixer* const mixer = (const Mixer*)user_data;
 
@@ -67,7 +72,7 @@ static size_t FMResamplerInputCallback(const void *user_data, cc_s16l *buffer, s
 	return frames_to_do;
 }
 
-static size_t PSGResamplerInputCallback(const void *user_data, cc_s16l *buffer, size_t buffer_size)
+static size_t PSGResamplerInputCallback(void *user_data, cc_s16l *buffer, size_t buffer_size)
 {
 	const Mixer* const mixer = (const Mixer*)user_data;
 
@@ -83,7 +88,7 @@ static size_t PSGResamplerInputCallback(const void *user_data, cc_s16l *buffer, 
 /* There is no need for clamping in either of these callbacks because the
    samples are output low enough to never exceed the 16-bit limit. */
 
-static cc_bool FMResamplerOutputCallback(const void *user_data, const cc_s32f *frame, cc_u8f channels)
+static cc_bool FMResamplerOutputCallback(void *user_data, const cc_s32f *frame, cc_u8f channels)
 {
 	const Mixer* const mixer = (const Mixer*)user_data;
 
@@ -98,7 +103,7 @@ static cc_bool FMResamplerOutputCallback(const void *user_data, const cc_s32f *f
 	return mixer->state->output_buffer_pointer != &mixer->state->output_buffer[CC_COUNT_OF(mixer->state->output_buffer)];
 }
 
-static cc_bool PSGResamplerOutputCallback(const void *user_data, const cc_s32f *frame, cc_u8f channels)
+static cc_bool PSGResamplerOutputCallback(void *user_data, const cc_s32f *frame, cc_u8f channels)
 {
 	const Mixer* const mixer = (const Mixer*)user_data;
 	const MIXER_FORMAT sample = (MIXER_FORMAT)*frame;
@@ -122,30 +127,19 @@ static void Mixer_Constant_Initialise(Mixer_Constant *constant)
 
 static void Mixer_State_Initialise(Mixer_State *state, cc_u32f output_sample_rate, float emulator_frame_rate, cc_bool pal_mode, cc_bool low_pass_filter)
 {
-	cc_u32f in_fm_sample_rate, in_psg_sample_rate;
+	(void)emulator_frame_rate; // TODO: Kill this!
 
-	if (pal_mode)
-	{
-		/* Divide and multiply by the frame rate to try to make the sample rate closer to the emulator's output. */
-		const cc_u32f pal_fm_sample_rate = CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_PAL));
-		const cc_u32f pal_psg_sample_rate = CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_PAL));
+	state->fm_sample_rate = pal_mode
+		? CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_PAL))
+		: CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC));
+	state->psg_sample_rate = pal_mode
+		? CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_PAL))
+		: CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC));
+	state->low_pass_filter_sample_rate = low_pass_filter ? 22000 : output_sample_rate;
+	state->output_sample_rate = output_sample_rate;
 
-		in_fm_sample_rate = CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(pal_fm_sample_rate * emulator_frame_rate);
-		in_psg_sample_rate = CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(pal_psg_sample_rate * emulator_frame_rate);
-	}
-	else
-	{
-		const cc_u32f ntsc_fm_sample_rate = CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC));
-		const cc_u32f ntsc_psg_sample_rate = CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC));
-
-		in_fm_sample_rate = CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(ntsc_fm_sample_rate * emulator_frame_rate);
-		in_psg_sample_rate = CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(ntsc_psg_sample_rate * emulator_frame_rate);
-	}
-
-	const cc_u32f low_pass_filter_sample_rate = low_pass_filter ? 22000 : output_sample_rate;
-
-	ClownResampler_HighLevel_Init(&state->fm_resampler, MIXER_FM_CHANNEL_COUNT, in_fm_sample_rate, output_sample_rate, low_pass_filter_sample_rate);
-	ClownResampler_HighLevel_Init(&state->psg_resampler, MIXER_PSG_CHANNEL_COUNT, in_psg_sample_rate, output_sample_rate, low_pass_filter_sample_rate);
+	ClownResampler_HighLevel_Init(&state->fm_resampler, MIXER_FM_CHANNEL_COUNT, state->fm_sample_rate * MIXER_DOWNSAMPLE_CAP, state->output_sample_rate, state->low_pass_filter_sample_rate);
+	ClownResampler_HighLevel_Init(&state->psg_resampler, MIXER_PSG_CHANNEL_COUNT, state->psg_sample_rate * MIXER_DOWNSAMPLE_CAP, state->output_sample_rate, state->low_pass_filter_sample_rate);
 }
 
 static void Mixer_Begin(const Mixer *mixer)
@@ -179,9 +173,16 @@ static cc_s16l* Mixer_AllocatePSGSamples(const Mixer *mixer, size_t total_frames
 	return allocated_samples;
 }
 
-static void Mixer_End(const Mixer *mixer, void (*callback)(const void *user_data, MIXER_FORMAT *audio_samples, size_t total_frames), const void *user_data)
+static void Mixer_End(const Mixer *mixer, cc_u32f numerator, cc_u32f denominator, void (*callback)(const void *user_data, MIXER_FORMAT *audio_samples, size_t total_frames), const void *user_data)
 {
 	size_t frames_to_output;
+
+	/* Cap the sample rate since the resamplers can only downsample by so much. */
+	const cc_u32f adjusted_fm_sample_rate = CC_MIN(mixer->state->fm_sample_rate * MIXER_DOWNSAMPLE_CAP, mixer->state->fm_sample_rate * numerator / denominator);
+	const cc_u32f adjusted_psg_sample_rate = CC_MIN(mixer->state->psg_sample_rate * MIXER_DOWNSAMPLE_CAP, mixer->state->psg_sample_rate * numerator / denominator);
+
+	ClownResampler_HighLevel_Adjust(&mixer->state->fm_resampler, adjusted_fm_sample_rate, mixer->state->output_sample_rate, mixer->state->low_pass_filter_sample_rate);
+	ClownResampler_HighLevel_Adjust(&mixer->state->psg_resampler, adjusted_psg_sample_rate, mixer->state->output_sample_rate, mixer->state->low_pass_filter_sample_rate);
 
 	/* Resample, mix, and output the audio for this frame. */
 	mixer->state->fm_input_buffer_read_index = 0;
