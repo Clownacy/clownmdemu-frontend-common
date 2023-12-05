@@ -1,6 +1,4 @@
-#include <assert.h>
 #include <stddef.h>
-#include <string.h>
 
 #include "clownmdemu/clowncommon/clowncommon.h"
 #include "clownmdemu/clownmdemu.h"
@@ -55,6 +53,21 @@ typedef struct Mixer
 #define CLOWNRESAMPLER_IMPLEMENTATION
 #define CLOWNRESAMPLER_STATIC
 #include "clownresampler/clownresampler.h"
+
+#ifndef MIXER_ASSERT
+#include <assert.h>
+#define MIXER_ASSERT assert
+#endif
+
+#ifndef MIXER_MEMCPY
+#include <string.h>
+#define MIXER_MEMCPY memcpy
+#endif
+
+#ifndef MIXER_MEMSET
+#include <string.h>
+#define MIXER_MEMSET memset
+#endif
 
 /* See clownresampler's documentation for more information. */
 #define MIXER_DOWNSAMPLE_CAP 4
@@ -216,7 +229,7 @@ static size_t Mixer_FMResamplerInputCallback(void* const user_data, cc_s16l* con
 
 	const size_t frames_to_do = CC_MIN(buffer_size, (mixer->state->fm_input_buffer_write_index - mixer->state->fm_input_buffer_read_index) / MIXER_FM_CHANNEL_COUNT);
 
-	memcpy(buffer, &mixer->state->fm_input_buffer[mixer->state->fm_input_buffer_read_index], frames_to_do * sizeof(*mixer->state->fm_input_buffer) * MIXER_FM_CHANNEL_COUNT);
+	MIXER_MEMCPY(buffer, &mixer->state->fm_input_buffer[mixer->state->fm_input_buffer_read_index], frames_to_do * sizeof(*mixer->state->fm_input_buffer) * MIXER_FM_CHANNEL_COUNT);
 
 	mixer->state->fm_input_buffer_read_index += frames_to_do * MIXER_FM_CHANNEL_COUNT;
 
@@ -229,7 +242,7 @@ static size_t Mixer_PSGResamplerInputCallback(void* const user_data, cc_s16l* co
 
 	const size_t frames_to_do = CC_MIN(buffer_size, (mixer->state->psg_input_buffer_write_index - mixer->state->psg_input_buffer_read_index) / MIXER_PSG_CHANNEL_COUNT);
 
-	memcpy(buffer, &mixer->state->psg_input_buffer[mixer->state->psg_input_buffer_read_index], frames_to_do * sizeof(*mixer->state->psg_input_buffer) * MIXER_PSG_CHANNEL_COUNT);
+	MIXER_MEMCPY(buffer, &mixer->state->psg_input_buffer[mixer->state->psg_input_buffer_read_index], frames_to_do * sizeof(*mixer->state->psg_input_buffer) * MIXER_PSG_CHANNEL_COUNT);
 
 	mixer->state->psg_input_buffer_read_index += frames_to_do * MIXER_PSG_CHANNEL_COUNT;
 
@@ -297,8 +310,8 @@ static void Mixer_State_Initialise(Mixer_State* const state, const cc_u32f outpu
 static void Mixer_Begin(const Mixer* const mixer)
 {
 	/* Reset the audio buffers so that they can be mixed into. */
-	memset(mixer->state->fm_input_buffer, 0, sizeof(mixer->state->fm_input_buffer));
-	memset(mixer->state->psg_input_buffer, 0, sizeof(mixer->state->psg_input_buffer));
+	MIXER_MEMSET(mixer->state->fm_input_buffer, 0, sizeof(mixer->state->fm_input_buffer));
+	MIXER_MEMSET(mixer->state->psg_input_buffer, 0, sizeof(mixer->state->psg_input_buffer));
 	mixer->state->fm_input_buffer_write_index = 0;
 	mixer->state->psg_input_buffer_write_index = 0;
 }
@@ -309,7 +322,7 @@ static cc_s16l* Mixer_AllocateFMSamples(const Mixer* const mixer, const size_t t
 
 	mixer->state->fm_input_buffer_write_index += total_frames * MIXER_FM_CHANNEL_COUNT;
 
-	assert(mixer->state->fm_input_buffer_write_index <= CC_COUNT_OF(mixer->state->fm_input_buffer));
+	MIXER_ASSERT(mixer->state->fm_input_buffer_write_index <= CC_COUNT_OF(mixer->state->fm_input_buffer));
 
 	return allocated_samples;
 }
@@ -320,7 +333,7 @@ static cc_s16l* Mixer_AllocatePSGSamples(const Mixer* const mixer, const size_t 
 
 	mixer->state->psg_input_buffer_write_index += total_frames * MIXER_PSG_CHANNEL_COUNT;
 
-	assert(mixer->state->psg_input_buffer_write_index <= CC_COUNT_OF(mixer->state->psg_input_buffer));
+	MIXER_ASSERT(mixer->state->psg_input_buffer_write_index <= CC_COUNT_OF(mixer->state->psg_input_buffer));
 
 	return allocated_samples;
 }
