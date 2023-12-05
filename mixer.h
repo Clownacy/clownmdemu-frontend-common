@@ -326,7 +326,7 @@ static cc_s16l* Mixer_AllocatePSGSamples(const Mixer* const mixer, const size_t 
 	return allocated_samples;
 }
 
-static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const cc_u32f denominator, void (* const callback)(const void *user_data, MIXER_FORMAT *audio_samples, size_t total_frames), const void* const user_data)
+static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const cc_u32f denominator, void (* const callback)(void *user_data, MIXER_FORMAT *audio_samples, size_t total_frames), const void* const user_data)
 {
 	size_t frames_to_output;
 
@@ -359,7 +359,7 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 		frames_to_output = CC_MIN(total_resampled_fm_frames, total_resampled_psg_frames);
 
 		/* Push the resampled, mixed audio to the device for playback. */
-		callback(user_data, mixer->state->output_buffer, frames_to_output);
+		callback((void*)user_data, mixer->state->output_buffer, frames_to_output);
 
 		/* If the resampler has run out of data, then we're free to exit this loop. */
 	} while (frames_to_output == CC_COUNT_OF(mixer->state->output_buffer) / MIXER_FM_CHANNEL_COUNT);
