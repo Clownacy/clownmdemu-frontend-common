@@ -210,7 +210,6 @@ static cc_u32f Mixer_MulDiv(const cc_u32f a, const cc_u32f b, const cc_u32f c)
 #endif
 }
 
-/* TODO: Namespace these! */
 static size_t Mixer_FMResamplerInputCallback(void* const user_data, cc_s16l* const buffer, const size_t buffer_size)
 {
 	const Mixer* const mixer = (const Mixer*)user_data;
