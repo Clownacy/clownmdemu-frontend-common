@@ -285,7 +285,7 @@ static void Mixer_Source_NewFrame(Mixer_Source* const source)
 	source->write_index = 0;
 }
 
-static cc_s16l* Mixer_Source_AllocateSamples(Mixer_Source* const source, const size_t total_frames)
+static cc_s16l* Mixer_Source_AllocateFrames(Mixer_Source* const source, const size_t total_frames)
 {
 	cc_s16l* const allocated_samples = Mixer_Source_Buffer(source, source->resampler.integer_stretched_kernel_radius * 2 + source->write_index);
 
@@ -294,6 +294,11 @@ static cc_s16l* Mixer_Source_AllocateSamples(Mixer_Source* const source, const s
 	MIXER_ASSERT(source->write_index <= source->capacity);
 
 	return allocated_samples;
+}
+
+static size_t Mixer_Source_GetTotalAllocatedFrames(const Mixer_Source* const source)
+{
+	return source->write_index;
 }
 
 static void Mixer_Source_GetFrame(Mixer_Source* const source, const ClownResampler_Precomputed* const precomputed, cc_s32f* const frame, const cc_u32f position)
@@ -353,12 +358,12 @@ static void Mixer_Begin(const Mixer* const mixer)
 
 static cc_s16l* Mixer_AllocateFMSamples(const Mixer* const mixer, const size_t total_frames)
 {
-	return Mixer_Source_AllocateSamples(&mixer->state->fm, total_frames);
+	return Mixer_Source_AllocateFrames(&mixer->state->fm, total_frames);
 }
 
 static cc_s16l* Mixer_AllocatePSGSamples(const Mixer* const mixer, const size_t total_frames)
 {
-	return Mixer_Source_AllocateSamples(&mixer->state->psg, total_frames);
+	return Mixer_Source_AllocateFrames(&mixer->state->psg, total_frames);
 }
 
 static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const cc_u32f denominator, void (* const callback)(void *user_data, MIXER_FORMAT *audio_samples, size_t total_frames), const void* const user_data)
@@ -366,8 +371,8 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 	cc_u32f i;
 
 	const cc_u32f adjusted_output_length = Mixer_MulDiv(mixer->state->output_length, denominator, numerator);
-	const size_t available_fm_frames = mixer->state->fm.write_index;
-	const size_t available_psg_frames = mixer->state->psg.write_index;
+	const size_t available_fm_frames = Mixer_Source_GetTotalAllocatedFrames(&mixer->state->fm);
+	const size_t available_psg_frames = Mixer_Source_GetTotalAllocatedFrames(&mixer->state->psg);
 	const cc_u32f fm_ratio = CLOWNRESAMPLER_TO_FIXED_POINT_FROM_INTEGER(available_fm_frames) / adjusted_output_length;
 	const cc_u32f psg_ratio = CLOWNRESAMPLER_TO_FIXED_POINT_FROM_INTEGER(available_psg_frames) / adjusted_output_length;
 
