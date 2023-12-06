@@ -88,6 +88,8 @@ typedef struct Mixer
 #define MIXER_HAS_LONG_LONG
 #endif
 
+/* MulDiv Stuff */
+
 #ifndef MIXER_HAS_LONG_LONG
 typedef struct Mixer_SplitInteger
 {
@@ -250,6 +252,8 @@ static cc_u32f Mixer_MulDiv(const cc_u32f a, const cc_u32f b, const cc_u32f c)
 #endif
 }
 
+/* Mixer API */
+
 static void Mixer_Constant_Initialise(Mixer_Constant* const constant)
 {
 	/* Compute clownresampler's lookup tables.*/
@@ -354,6 +358,7 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 	const size_t available_psg_frames = mixer->state->psg_input_buffer_write_index;
 	const cc_u32f fm_ratio = CLOWNRESAMPLER_TO_FIXED_POINT_FROM_INTEGER(available_fm_frames) / adjusted_output_length;
 	const cc_u32f psg_ratio = CLOWNRESAMPLER_TO_FIXED_POINT_FROM_INTEGER(available_psg_frames) / adjusted_output_length;
+
 	MIXER_FORMAT output_buffer[CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(48000)][MIXER_FM_CHANNEL_COUNT];
 	cc_s16l (*output_buffer_pointer)[MIXER_FM_CHANNEL_COUNT] = output_buffer;
 
@@ -375,21 +380,20 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 		ClownResampler_LowestLevel_Resample(&mixer->state->psg_resampler, &mixer->constant->resampler_precomputed, psg_frame, MIXER_PSG_CHANNEL_COUNT, mixer->state->psg_input_buffer[mixer->state->psg_maximum_integer_stretched_kernel_radius - mixer->state->psg_resampler.integer_stretched_kernel_radius], psg_input_buffer_position / CLOWNRESAMPLER_FIXED_POINT_FRACTIONAL_SIZE, psg_input_buffer_position % CLOWNRESAMPLER_FIXED_POINT_FRACTIONAL_SIZE);
 
 		/* Upsample the PSG to stereo and mix it with the FM to produce the final audio. */
-		/* There is no need for clamping in either of these callbacks because the
-			samples are output low enough to never exceed the 16-bit limit. */
+		/* There is no need for clamping because the samples are output at a low-enough volume to never exceed the 16-bit limit. */
 		(*output_buffer_pointer)[0] = fm_frame[0] + psg_frame[0];
 		(*output_buffer_pointer)[1] = fm_frame[1] + psg_frame[0];
 		++output_buffer_pointer;
 
 		if (output_buffer_pointer == &output_buffer[CC_COUNT_OF(output_buffer)])
 		{
-			/* Push the resampled, mixed audio to the device for playback. */
+			/* The buffer is full, so flush it. */
 			callback((void*)user_data, &output_buffer[0][0], CC_COUNT_OF(output_buffer));
 			output_buffer_pointer = output_buffer;
 		}
 	}
 
-	/* Push the resampled, mixed audio to the device for playback. */
+	/* Push whatever samples remain in the output buffer. */
 	callback((void*)user_data, &output_buffer[0][0], output_buffer_pointer - output_buffer);
 }
 
