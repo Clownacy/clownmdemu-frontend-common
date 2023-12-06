@@ -94,6 +94,20 @@ typedef struct Mixer_SplitInteger
 	unsigned long splits[3];
 } Mixer_SplitInteger;
 
+static void Mixer_Add(Mixer_SplitInteger* const output, const cc_u32f value)
+{
+	const cc_u32f upper = value / 0x10000;
+	const cc_u32f lower = value % 0x10000;
+
+	output->splits[2] += lower;
+	output->splits[1] += upper + output->splits[2] / 0x10000;
+	output->splits[0] += output->splits[1] / 0x10000;
+
+	output->splits[2] %= 0x10000;
+	output->splits[1] %= 0x10000;
+	output->splits[0] %= 0x10000;
+}
+
 static void Mixer_Subtract(Mixer_SplitInteger* const minuend, const Mixer_SplitInteger* const subtrahend)
 {
 	unsigned long carry;
@@ -227,10 +241,11 @@ static cc_u32f Mixer_Divide(Mixer_SplitInteger* const dividend, const cc_u32f di
 static cc_u32f Mixer_MulDiv(const cc_u32f a, const cc_u32f b, const cc_u32f c)
 {
 #ifdef MIXER_HAS_LONG_LONG
-	return (unsigned long long)a * b / c;
+	return CC_DIVIDE_ROUND((unsigned long long)a * b, c);
 #else
 	Mixer_SplitInteger d;
 	Mixer_Multiply(&d, a, b); /* Lit af. */
+	Mixer_Add(&d, c / 2); /* This causes the division to round to the nearest value. */
 	return Mixer_Divide(&d, c);
 #endif
 }
