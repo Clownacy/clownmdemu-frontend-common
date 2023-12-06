@@ -49,7 +49,6 @@ typedef struct Mixer
 #ifdef MIXER_IMPLEMENTATION
 
 #define CLOWNRESAMPLER_IMPLEMENTATION
-#define CLOWNRESAMPLER_STATIC
 #include "clownresampler/clownresampler.h"
 
 #ifndef MIXER_ASSERT
