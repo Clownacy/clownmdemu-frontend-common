@@ -91,7 +91,7 @@ typedef struct Mixer
 #ifndef MIXER_HAS_LONG_LONG
 typedef struct Mixer_SplitInteger
 {
-	unsigned long splits[3];
+	cc_u32f splits[3];
 } Mixer_SplitInteger;
 
 static void Mixer_Add(Mixer_SplitInteger* const output, const cc_u32f value)
@@ -110,14 +110,14 @@ static void Mixer_Add(Mixer_SplitInteger* const output, const cc_u32f value)
 
 static void Mixer_Subtract(Mixer_SplitInteger* const minuend, const Mixer_SplitInteger* const subtrahend)
 {
-	unsigned long carry;
-	unsigned int i;
+	cc_u32f carry;
+	cc_u8f i;
 
 	carry = 0;
 
 	for (i = CC_COUNT_OF(minuend->splits); i-- != 0; )
 	{
-		const unsigned long difference = minuend->splits[i] - subtrahend->splits[i] + carry;
+		const cc_u32f difference = minuend->splits[i] - subtrahend->splits[i] + carry;
 
 		/* Isolate and sign-extend the overflow to obtain the new carry. */
 		carry = difference >> 16;
@@ -130,7 +130,7 @@ static void Mixer_Subtract(Mixer_SplitInteger* const minuend, const Mixer_SplitI
 
 static cc_bool Mixer_GreaterThan(const Mixer_SplitInteger* const a, const Mixer_SplitInteger* const b)
 {
-	unsigned int i;
+	cc_u8f i;
 
 	for (i = 0; i < CC_COUNT_OF(a->splits); ++i)
 	{
@@ -145,14 +145,14 @@ static cc_bool Mixer_GreaterThan(const Mixer_SplitInteger* const a, const Mixer_
 
 static void Mixer_LeftShift(Mixer_SplitInteger* const value)
 {
-	unsigned long carry;
-	unsigned int i;
+	cc_u32f carry;
+	cc_u8f i;
 
 	carry = 0;
 
 	for (i = CC_COUNT_OF(value->splits); i-- != 0; )
 	{
-		const unsigned long new_carry = value->splits[i] >> 15;
+		const cc_u32f new_carry = value->splits[i] >> 15;
 		value->splits[i] <<= 1;
 		value->splits[i] |= carry;
 		carry = new_carry;
@@ -162,14 +162,14 @@ static void Mixer_LeftShift(Mixer_SplitInteger* const value)
 
 static void Mixer_RightShift(Mixer_SplitInteger* const value)
 {
-	unsigned long carry;
-	unsigned int i;
+	cc_u32f carry;
+	cc_u8f i;
 
 	carry = 0;
 
 	for (i = 0; i < CC_COUNT_OF(value->splits); ++i)
 	{
-		const unsigned long new_carry = value->splits[i] << 15;
+		const cc_u32f new_carry = value->splits[i] << 15;
 		value->splits[i] >>= 1;
 		value->splits[i] |= carry;
 		carry = new_carry;
@@ -179,10 +179,10 @@ static void Mixer_RightShift(Mixer_SplitInteger* const value)
 
 static void Mixer_Multiply(Mixer_SplitInteger* const output, const cc_u32f input_a, const cc_u32f input_b)
 {
-	const unsigned long a_upper = input_a / 0x10000;
-	const unsigned long a_lower = input_a % 0x10000;
-	const unsigned long b_upper = input_b / 0x10000;
-	const unsigned long b_lower = input_b % 0x10000;
+	const cc_u32f a_upper = input_a / 0x10000;
+	const cc_u32f a_lower = input_a % 0x10000;
+	const cc_u32f b_upper = input_b / 0x10000;
+	const cc_u32f b_lower = input_b % 0x10000;
 
 	output->splits[2] = a_lower * b_lower;
 	output->splits[1] = a_upper * b_lower + a_lower * b_upper;
@@ -199,8 +199,8 @@ static void Mixer_Multiply(Mixer_SplitInteger* const output, const cc_u32f input
 static cc_u32f Mixer_Divide(Mixer_SplitInteger* const dividend, const cc_u32f divisor_raw)
 {
 	Mixer_SplitInteger divisor;
-	unsigned int shift_amount;
-	unsigned long result;
+	cc_u8f shift_amount;
+	cc_u32f result;
 
 	divisor.splits[0] = 0;
 	divisor.splits[1] = divisor_raw / 0x10000;
