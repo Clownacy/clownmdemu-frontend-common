@@ -23,13 +23,11 @@ typedef struct Mixer_Constant
 
 typedef struct Mixer_State
 {
-	size_t fm_maximum_integer_stretched_kernel_radius;
 	cc_s16l (*fm_input_buffer)[MIXER_FM_CHANNEL_COUNT];
 	size_t fm_input_buffer_capacity;
 	size_t fm_input_buffer_write_index;
 	ClownResampler_LowestLevel_Configuration fm_resampler;
 
-	size_t psg_maximum_integer_stretched_kernel_radius;
 	cc_s16l (*psg_input_buffer)[MIXER_PSG_CHANNEL_COUNT];
 	size_t psg_input_buffer_capacity;
 	size_t psg_input_buffer_write_index;
@@ -77,9 +75,6 @@ typedef struct Mixer
 #include <string.h>
 #define MIXER_MEMSET memset
 #endif
-
-/* See clownresampler's documentation for more information. */
-#define MIXER_DOWNSAMPLE_CAP 4
 
 #define MIXER_SIZE_OF_FM_FRAME (MIXER_FM_CHANNEL_COUNT * sizeof(MIXER_FORMAT))
 #define MIXER_SIZE_OF_PSG_FRAME (MIXER_PSG_CHANNEL_COUNT * sizeof(MIXER_FORMAT))
@@ -271,25 +266,18 @@ static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_u32f ou
 	state->low_pass_filter_sample_rate = low_pass_filter ? 22000 : output_sample_rate;
 	state->output_sample_rate = output_sample_rate;
 
-	/* Compute maximum stretched kernel radius. */
-	ClownResampler_LowestLevel_Configure(&state->fm_resampler, state->fm_sample_rate * MIXER_DOWNSAMPLE_CAP, state->output_sample_rate, state->low_pass_filter_sample_rate);
-	ClownResampler_LowestLevel_Configure(&state->psg_resampler, state->psg_sample_rate * MIXER_DOWNSAMPLE_CAP, state->output_sample_rate, state->low_pass_filter_sample_rate);
-
-	state->fm_maximum_integer_stretched_kernel_radius = state->fm_resampler.integer_stretched_kernel_radius;
-	state->psg_maximum_integer_stretched_kernel_radius = state->psg_resampler.integer_stretched_kernel_radius;
+	ClownResampler_LowestLevel_Configure(&state->fm_resampler, state->fm_sample_rate, state->output_sample_rate, state->low_pass_filter_sample_rate);
+	ClownResampler_LowestLevel_Configure(&state->psg_resampler, state->psg_sample_rate, state->output_sample_rate, state->low_pass_filter_sample_rate);
 
 	/* The '+1' is just a lazy way of performing a rough ceiling division. */
 	state->fm_input_buffer_capacity = 1 + CC_MAX(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC), CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_PAL));
 	state->psg_input_buffer_capacity = 1 + CC_MAX(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC), CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_PAL));
 
-	state->fm_input_buffer = (cc_s16l(*)[MIXER_FM_CHANNEL_COUNT])MIXER_CALLOC(1, (state->fm_maximum_integer_stretched_kernel_radius * 2 + state->fm_input_buffer_capacity) * MIXER_SIZE_OF_FM_FRAME);
-	state->psg_input_buffer = (cc_s16l(*)[MIXER_PSG_CHANNEL_COUNT])MIXER_CALLOC(1, (state->psg_maximum_integer_stretched_kernel_radius * 2 + state->psg_input_buffer_capacity) * MIXER_SIZE_OF_PSG_FRAME);
+	state->fm_input_buffer = (cc_s16l(*)[MIXER_FM_CHANNEL_COUNT])MIXER_CALLOC(1, (state->fm_resampler.integer_stretched_kernel_radius * 2 + state->fm_input_buffer_capacity) * MIXER_SIZE_OF_FM_FRAME);
+	state->psg_input_buffer = (cc_s16l(*)[MIXER_PSG_CHANNEL_COUNT])MIXER_CALLOC(1, (state->psg_resampler.integer_stretched_kernel_radius * 2 + state->psg_input_buffer_capacity) * MIXER_SIZE_OF_PSG_FRAME);
 
 	if (state->fm_input_buffer != NULL && state->psg_input_buffer != NULL)
 	{
-		ClownResampler_LowestLevel_Configure(&state->fm_resampler, state->fm_sample_rate, state->output_sample_rate, state->low_pass_filter_sample_rate);
-		ClownResampler_LowestLevel_Configure(&state->psg_resampler, state->psg_sample_rate, state->output_sample_rate, state->low_pass_filter_sample_rate);
-
 		state->output_length = pal_mode ? CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(output_sample_rate) : CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(output_sample_rate);
 
 		return cc_true;
@@ -309,19 +297,19 @@ static void Mixer_State_Deinitialise(Mixer_State* const state)
 
 static void Mixer_Begin(const Mixer* const mixer)
 {
-	const size_t fm_maximum_integer_stretched_kernel_diameter = mixer->state->fm_maximum_integer_stretched_kernel_radius * 2;
-	const size_t psg_maximum_integer_stretched_kernel_diameter = mixer->state->psg_maximum_integer_stretched_kernel_radius * 2;
+	const size_t fm_integer_stretched_kernel_diameter = mixer->state->fm_resampler.integer_stretched_kernel_radius * 2;
+	const size_t psg_integer_stretched_kernel_diameter = mixer->state->psg_resampler.integer_stretched_kernel_radius * 2;
 
 	/* To make the resampler happy, we need to maintain some padding frames. */
 	/* See clownresampler's documentation for more information. */
 
 	/* Copy the end of each buffer to its beginning, since we never used all of it. */
-	MIXER_MEMMOVE(mixer->state->fm_input_buffer, mixer->state->fm_input_buffer + mixer->state->fm_input_buffer_write_index, fm_maximum_integer_stretched_kernel_diameter * MIXER_SIZE_OF_FM_FRAME);
-	MIXER_MEMMOVE(mixer->state->psg_input_buffer, mixer->state->psg_input_buffer + mixer->state->psg_input_buffer_write_index, psg_maximum_integer_stretched_kernel_diameter * MIXER_SIZE_OF_PSG_FRAME);
+	MIXER_MEMMOVE(mixer->state->fm_input_buffer, mixer->state->fm_input_buffer + mixer->state->fm_input_buffer_write_index, fm_integer_stretched_kernel_diameter * MIXER_SIZE_OF_FM_FRAME);
+	MIXER_MEMMOVE(mixer->state->psg_input_buffer, mixer->state->psg_input_buffer + mixer->state->psg_input_buffer_write_index, psg_integer_stretched_kernel_diameter * MIXER_SIZE_OF_PSG_FRAME);
 
 	/* Blank the remainder of the buffers so that they can be mixed into. */
-	MIXER_MEMSET(mixer->state->fm_input_buffer + fm_maximum_integer_stretched_kernel_diameter, 0, mixer->state->fm_input_buffer_write_index * MIXER_SIZE_OF_FM_FRAME);
-	MIXER_MEMSET(mixer->state->psg_input_buffer + psg_maximum_integer_stretched_kernel_diameter, 0, mixer->state->psg_input_buffer_write_index * MIXER_SIZE_OF_PSG_FRAME);
+	MIXER_MEMSET(mixer->state->fm_input_buffer + fm_integer_stretched_kernel_diameter, 0, mixer->state->fm_input_buffer_write_index * MIXER_SIZE_OF_FM_FRAME);
+	MIXER_MEMSET(mixer->state->psg_input_buffer + psg_integer_stretched_kernel_diameter, 0, mixer->state->psg_input_buffer_write_index * MIXER_SIZE_OF_PSG_FRAME);
 
 	mixer->state->fm_input_buffer_write_index = 0;
 	mixer->state->psg_input_buffer_write_index = 0;
@@ -329,7 +317,7 @@ static void Mixer_Begin(const Mixer* const mixer)
 
 static cc_s16l* Mixer_AllocateFMSamples(const Mixer* const mixer, const size_t total_frames)
 {
-	cc_s16l* const allocated_samples = mixer->state->fm_input_buffer[mixer->state->fm_maximum_integer_stretched_kernel_radius * 2 + mixer->state->fm_input_buffer_write_index];
+	cc_s16l* const allocated_samples = mixer->state->fm_input_buffer[mixer->state->fm_resampler.integer_stretched_kernel_radius * 2 + mixer->state->fm_input_buffer_write_index];
 
 	mixer->state->fm_input_buffer_write_index += total_frames;
 
@@ -340,7 +328,7 @@ static cc_s16l* Mixer_AllocateFMSamples(const Mixer* const mixer, const size_t t
 
 static cc_s16l* Mixer_AllocatePSGSamples(const Mixer* const mixer, const size_t total_frames)
 {
-	cc_s16l* const allocated_samples = mixer->state->psg_input_buffer[mixer->state->psg_maximum_integer_stretched_kernel_radius * 2 + mixer->state->psg_input_buffer_write_index];
+	cc_s16l* const allocated_samples = mixer->state->psg_input_buffer[mixer->state->psg_resampler.integer_stretched_kernel_radius * 2 + mixer->state->psg_input_buffer_write_index];
 
 	mixer->state->psg_input_buffer_write_index += total_frames;
 
@@ -376,8 +364,8 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 		const cc_u32f fm_input_buffer_position = i * fm_ratio;
 		const cc_u32f psg_input_buffer_position = i * psg_ratio;
 
-		ClownResampler_LowestLevel_Resample(&mixer->state->fm_resampler, &mixer->constant->resampler_precomputed, fm_frame, MIXER_FM_CHANNEL_COUNT, mixer->state->fm_input_buffer[mixer->state->fm_maximum_integer_stretched_kernel_radius - mixer->state->fm_resampler.integer_stretched_kernel_radius], fm_input_buffer_position / CLOWNRESAMPLER_FIXED_POINT_FRACTIONAL_SIZE, fm_input_buffer_position % CLOWNRESAMPLER_FIXED_POINT_FRACTIONAL_SIZE);
-		ClownResampler_LowestLevel_Resample(&mixer->state->psg_resampler, &mixer->constant->resampler_precomputed, psg_frame, MIXER_PSG_CHANNEL_COUNT, mixer->state->psg_input_buffer[mixer->state->psg_maximum_integer_stretched_kernel_radius - mixer->state->psg_resampler.integer_stretched_kernel_radius], psg_input_buffer_position / CLOWNRESAMPLER_FIXED_POINT_FRACTIONAL_SIZE, psg_input_buffer_position % CLOWNRESAMPLER_FIXED_POINT_FRACTIONAL_SIZE);
+		ClownResampler_LowestLevel_Resample(&mixer->state->fm_resampler, &mixer->constant->resampler_precomputed, fm_frame, MIXER_FM_CHANNEL_COUNT, &mixer->state->fm_input_buffer[0][0], fm_input_buffer_position / CLOWNRESAMPLER_FIXED_POINT_FRACTIONAL_SIZE, fm_input_buffer_position % CLOWNRESAMPLER_FIXED_POINT_FRACTIONAL_SIZE);
+		ClownResampler_LowestLevel_Resample(&mixer->state->psg_resampler, &mixer->constant->resampler_precomputed, psg_frame, MIXER_PSG_CHANNEL_COUNT, &mixer->state->psg_input_buffer[0][0], psg_input_buffer_position / CLOWNRESAMPLER_FIXED_POINT_FRACTIONAL_SIZE, psg_input_buffer_position % CLOWNRESAMPLER_FIXED_POINT_FRACTIONAL_SIZE);
 
 		/* Upsample the PSG to stereo and mix it with the FM to produce the final audio. */
 		/* There is no need for clamping because the samples are output at a low-enough volume to never exceed the 16-bit limit. */
