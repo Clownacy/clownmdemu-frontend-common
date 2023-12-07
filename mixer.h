@@ -36,7 +36,6 @@ typedef struct Mixer_State
 {
 	Mixer_Source fm, psg;
 
-	cc_u32f fm_sample_rate, psg_sample_rate, low_pass_filter_sample_rate, output_sample_rate;
 	cc_u32f output_length;
 } Mixer_State;
 
@@ -256,6 +255,7 @@ static cc_bool Mixer_Source_Initialise(Mixer_Source* const source, const cc_u8f 
 	/* The '+1' is just a lazy way of performing a rough ceiling division. */
 	source->capacity = 1 + CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(input_sample_rate);
 	source->buffer = (cc_s16l*)MIXER_CALLOC(1, (source->resampler.integer_stretched_kernel_radius * 2 + source->capacity) * source->channels * sizeof(MIXER_FORMAT));
+	source->write_index = 0;
 
 	return source->buffer != NULL;
 }
@@ -331,7 +331,6 @@ static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_u32f ou
 
 	if (fm_success && psg_success)
 	{
-		state->output_sample_rate = output_sample_rate;
 		state->output_length = pal_mode ? CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(output_sample_rate) : CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(output_sample_rate);
 
 		return cc_true;
