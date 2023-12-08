@@ -366,7 +366,7 @@ static cc_s16l* Mixer_AllocatePSGSamples(const Mixer* const mixer, const size_t 
 	return Mixer_Source_AllocateFrames(&mixer->state->psg, total_frames);
 }
 
-static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const cc_u32f denominator, void (* const callback)(void *user_data, MIXER_FORMAT *audio_samples, size_t total_frames), const void* const user_data)
+static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const cc_u32f denominator, void (* const callback)(void *user_data, const MIXER_FORMAT *audio_samples, size_t total_frames), const void* const user_data)
 {
 	cc_u32f i;
 
