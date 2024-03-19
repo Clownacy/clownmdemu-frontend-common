@@ -13,6 +13,7 @@
 
 #define MIXER_FM_CHANNEL_COUNT 2
 #define MIXER_PSG_CHANNEL_COUNT 1
+#define MIXER_PCM_CHANNEL_COUNT 2
 
 #ifndef MIXER_FORMAT
 #error "You need to define MIXER_FORMAT before including `mixer.h`."
@@ -34,7 +35,7 @@ typedef struct Mixer_Source
 
 typedef struct Mixer_State
 {
-	Mixer_Source fm, psg;
+	Mixer_Source fm, psg, pcm;
 
 	cc_u32f output_length;
 } Mixer_State;
@@ -318,18 +319,22 @@ static void Mixer_Constant_Initialise(Mixer_Constant* const constant)
 
 static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_u32f output_sample_rate, const cc_bool pal_mode, const cc_bool low_pass_filter)
 {
+	/* TODO: De-duplicate this code. */
 	const cc_u32f fm_sample_rate = pal_mode
 		? CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_PAL))
 		: CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC));
 	const cc_u32f psg_sample_rate = pal_mode
 		? CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_PAL))
 		: CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC));
+	const cc_u32f pcm_sample_rate = (pal_mode ? CLOWNMDEMU_MASTER_CLOCK_PAL : CLOWNMDEMU_MASTER_CLOCK_NTSC) / (CLOWNMDEMU_MCD_M68K_CLOCK_DIVIDER * CLOWNMDEMU_PCM_SAMPLE_RATE_DIVIDER);/* TODO: CLOWNMDEMU_PCM_SAMPLE_RATE */
 	const cc_u32f low_pass_filter_sample_rate = low_pass_filter ? 22000 : output_sample_rate;
 
+	/* TODO: Don't apply the low-pass filter to Mega CD audio. */
 	const cc_bool fm_success = Mixer_Source_Initialise(&state->fm, MIXER_FM_CHANNEL_COUNT, fm_sample_rate, output_sample_rate, low_pass_filter_sample_rate);
 	const cc_bool psg_success = Mixer_Source_Initialise(&state->psg, MIXER_PSG_CHANNEL_COUNT, psg_sample_rate, output_sample_rate, low_pass_filter_sample_rate);
+	const cc_bool pcm_success = Mixer_Source_Initialise(&state->pcm, MIXER_PCM_CHANNEL_COUNT, pcm_sample_rate, output_sample_rate, low_pass_filter_sample_rate);
 
-	if (fm_success && psg_success)
+	if (fm_success && psg_success && pcm_success)
 	{
 		state->output_length = pal_mode ? CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(output_sample_rate) : CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(output_sample_rate);
 
@@ -338,8 +343,10 @@ static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_u32f ou
 
 	if (fm_success)
 		Mixer_Source_Deinitialise(&state->fm);
-	else if (psg_success)
+	if (psg_success)
 		Mixer_Source_Deinitialise(&state->psg);
+	if (pcm_success)
+		Mixer_Source_Deinitialise(&state->pcm);
 
 	return cc_false;
 }
@@ -348,12 +355,14 @@ static void Mixer_State_Deinitialise(Mixer_State* const state)
 {
 	Mixer_Source_Deinitialise(&state->fm);
 	Mixer_Source_Deinitialise(&state->psg);
+	Mixer_Source_Deinitialise(&state->pcm);
 }
 
 static void Mixer_Begin(const Mixer* const mixer)
 {
 	Mixer_Source_NewFrame(&mixer->state->fm);
 	Mixer_Source_NewFrame(&mixer->state->psg);
+	Mixer_Source_NewFrame(&mixer->state->pcm);
 }
 
 static cc_s16l* Mixer_AllocateFMSamples(const Mixer* const mixer, const size_t total_frames)
@@ -366,6 +375,11 @@ static cc_s16l* Mixer_AllocatePSGSamples(const Mixer* const mixer, const size_t 
 	return Mixer_Source_AllocateFrames(&mixer->state->psg, total_frames);
 }
 
+static cc_s16l* Mixer_AllocatePCMSamples(const Mixer* const mixer, const size_t total_frames)
+{
+	return Mixer_Source_AllocateFrames(&mixer->state->pcm, total_frames);
+}
+
 static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const cc_u32f denominator, void (* const callback)(void *user_data, const MIXER_FORMAT *audio_samples, size_t total_frames), const void* const user_data)
 {
 	cc_u32f i;
@@ -373,8 +387,10 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 	const cc_u32f adjusted_output_length = Mixer_MulDiv(mixer->state->output_length, denominator, numerator);
 	const size_t available_fm_frames = Mixer_Source_GetTotalAllocatedFrames(&mixer->state->fm);
 	const size_t available_psg_frames = Mixer_Source_GetTotalAllocatedFrames(&mixer->state->psg);
+	const size_t available_pcm_frames = Mixer_Source_GetTotalAllocatedFrames(&mixer->state->pcm);
 	const cc_u32f fm_ratio = CLOWNRESAMPLER_TO_FIXED_POINT_FROM_INTEGER(available_fm_frames) / adjusted_output_length;
 	const cc_u32f psg_ratio = CLOWNRESAMPLER_TO_FIXED_POINT_FROM_INTEGER(available_psg_frames) / adjusted_output_length;
+	const cc_u32f pcm_ratio = CLOWNRESAMPLER_TO_FIXED_POINT_FROM_INTEGER(available_pcm_frames) / adjusted_output_length;
 
 	MIXER_FORMAT output_buffer[CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(48000)][MIXER_FM_CHANNEL_COUNT];
 	cc_s16l (*output_buffer_pointer)[MIXER_FM_CHANNEL_COUNT] = output_buffer;
@@ -382,6 +398,7 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 #if 0 /* This isn't necessary, right? */
 	ClownResampler_LowestLevel_Configure(&mixer->state->fm_resampler, Mixer_MulDiv(mixer->state->fm_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->low_pass_filter_sample_rate);
 	ClownResampler_LowestLevel_Configure(&mixer->state->psg_resampler, Mixer_MulDiv(mixer->state->psg_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->low_pass_filter_sample_rate);
+	ClownResampler_LowestLevel_Configure(&mixer->state->pcm_resampler, Mixer_MulDiv(mixer->state->pcm_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->low_pass_filter_sample_rate);
 #endif
 
 	/* Resample, mix, and output the audio for this frame. */
@@ -389,14 +406,17 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 	{
 		cc_s32f fm_frame[MIXER_FM_CHANNEL_COUNT];
 		cc_s32f psg_frame[MIXER_PSG_CHANNEL_COUNT];
+		cc_s32f pcm_frame[MIXER_PCM_CHANNEL_COUNT];
 
 		Mixer_Source_GetFrame(&mixer->state->fm, &mixer->constant->resampler_precomputed, fm_frame, i * fm_ratio);
 		Mixer_Source_GetFrame(&mixer->state->psg, &mixer->constant->resampler_precomputed, psg_frame, i * psg_ratio);
+		Mixer_Source_GetFrame(&mixer->state->pcm, &mixer->constant->resampler_precomputed, pcm_frame, i * pcm_ratio);
 
 		/* Upsample the PSG to stereo and mix it with the FM to produce the final audio. */
 		/* There is no need for clamping because the samples are output at a low-enough volume to never exceed the 16-bit limit. */
-		(*output_buffer_pointer)[0] = fm_frame[0] + psg_frame[0];
-		(*output_buffer_pointer)[1] = fm_frame[1] + psg_frame[0];
+		/* TODO: Actually, this is no longer the case now that PCM emulation has been introduced; rebalance the audio! */
+		(*output_buffer_pointer)[0] = fm_frame[0] + psg_frame[0] + pcm_frame[0];
+		(*output_buffer_pointer)[1] = fm_frame[1] + psg_frame[0] + pcm_frame[1];
 		++output_buffer_pointer;
 
 		if (output_buffer_pointer == &output_buffer[CC_COUNT_OF(output_buffer)])
