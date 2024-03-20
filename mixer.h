@@ -414,8 +414,8 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 
 		/* Upsample the PSG to stereo and mix it with the FM to produce the final audio. */
 		/* There is no need for clamping because the samples are output at a low-enough volume to never exceed the 16-bit limit. */
-		(*output_buffer_pointer)[0] = fm_frame[0] / 2 + psg_frame[0] / 16 + pcm_frame[0] * 8;
-		(*output_buffer_pointer)[1] = fm_frame[1] / 2 + psg_frame[0] / 16 + pcm_frame[1] * 8;
+		(*output_buffer_pointer)[0] = fm_frame[0] / 2 + psg_frame[0] / 16 + pcm_frame[0] / 8;
+		(*output_buffer_pointer)[1] = fm_frame[1] / 2 + psg_frame[0] / 16 + pcm_frame[1] / 8;
 		++output_buffer_pointer;
 
 		if (output_buffer_pointer == &output_buffer[CC_COUNT_OF(output_buffer)])
