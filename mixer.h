@@ -14,6 +14,7 @@
 #define MIXER_FM_CHANNEL_COUNT 2
 #define MIXER_PSG_CHANNEL_COUNT 1
 #define MIXER_PCM_CHANNEL_COUNT 2
+#define MIXER_CDDA_CHANNEL_COUNT 2
 
 #ifndef MIXER_FORMAT
 #error "You need to define MIXER_FORMAT before including `mixer.h`."
@@ -35,7 +36,7 @@ typedef struct Mixer_Source
 
 typedef struct Mixer_State
 {
-	Mixer_Source fm, psg, pcm;
+	Mixer_Source fm, psg, pcm, cdda;
 
 	cc_u32f output_length;
 } Mixer_State;
@@ -329,14 +330,16 @@ static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_u32f ou
 	const cc_u32f pcm_sample_rate = pal_mode
 		? CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_PCM_SAMPLE_RATE))
 		: CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_PCM_SAMPLE_RATE));
+	const cc_u32f cdda_sample_rate = 44100;
 	const cc_u32f low_pass_filter_sample_rate = low_pass_filter ? 22000 : output_sample_rate;
 
 	/* Remember: Don't apply the low-pass filter to Mega CD audio! */
 	const cc_bool fm_success = Mixer_Source_Initialise(&state->fm, MIXER_FM_CHANNEL_COUNT, fm_sample_rate, output_sample_rate, low_pass_filter_sample_rate);
 	const cc_bool psg_success = Mixer_Source_Initialise(&state->psg, MIXER_PSG_CHANNEL_COUNT, psg_sample_rate, output_sample_rate, low_pass_filter_sample_rate);
 	const cc_bool pcm_success = Mixer_Source_Initialise(&state->pcm, MIXER_PCM_CHANNEL_COUNT, pcm_sample_rate, output_sample_rate, output_sample_rate);
+	const cc_bool cdda_success = Mixer_Source_Initialise(&state->cdda, MIXER_CDDA_CHANNEL_COUNT, cdda_sample_rate, output_sample_rate, output_sample_rate);
 
-	if (fm_success && psg_success && pcm_success)
+	if (fm_success && psg_success && pcm_success && cdda_success)
 	{
 		state->output_length = pal_mode ? CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(output_sample_rate) : CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(output_sample_rate);
 
@@ -349,6 +352,8 @@ static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_u32f ou
 		Mixer_Source_Deinitialise(&state->psg);
 	if (pcm_success)
 		Mixer_Source_Deinitialise(&state->pcm);
+	if (cdda_success)
+		Mixer_Source_Deinitialise(&state->cdda);
 
 	return cc_false;
 }
@@ -358,6 +363,7 @@ static void Mixer_State_Deinitialise(Mixer_State* const state)
 	Mixer_Source_Deinitialise(&state->fm);
 	Mixer_Source_Deinitialise(&state->psg);
 	Mixer_Source_Deinitialise(&state->pcm);
+	Mixer_Source_Deinitialise(&state->cdda);
 }
 
 static void Mixer_Begin(const Mixer* const mixer)
@@ -365,6 +371,7 @@ static void Mixer_Begin(const Mixer* const mixer)
 	Mixer_Source_NewFrame(&mixer->state->fm);
 	Mixer_Source_NewFrame(&mixer->state->psg);
 	Mixer_Source_NewFrame(&mixer->state->pcm);
+	Mixer_Source_NewFrame(&mixer->state->cdda);
 }
 
 static cc_s16l* Mixer_AllocateFMSamples(const Mixer* const mixer, const size_t total_frames)
@@ -382,6 +389,11 @@ static cc_s16l* Mixer_AllocatePCMSamples(const Mixer* const mixer, const size_t 
 	return Mixer_Source_AllocateFrames(&mixer->state->pcm, total_frames);
 }
 
+static cc_s16l* Mixer_AllocateCDDASamples(const Mixer* const mixer, const size_t total_frames)
+{
+	return Mixer_Source_AllocateFrames(&mixer->state->cdda, total_frames);
+}
+
 static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const cc_u32f denominator, void (* const callback)(void *user_data, const MIXER_FORMAT *audio_samples, size_t total_frames), const void* const user_data)
 {
 	cc_u32f i;
@@ -390,9 +402,11 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 	const size_t available_fm_frames = Mixer_Source_GetTotalAllocatedFrames(&mixer->state->fm);
 	const size_t available_psg_frames = Mixer_Source_GetTotalAllocatedFrames(&mixer->state->psg);
 	const size_t available_pcm_frames = Mixer_Source_GetTotalAllocatedFrames(&mixer->state->pcm);
+	const size_t available_cdda_frames = Mixer_Source_GetTotalAllocatedFrames(&mixer->state->cdda);
 	const cc_u32f fm_ratio = CLOWNRESAMPLER_TO_FIXED_POINT_FROM_INTEGER(available_fm_frames) / adjusted_output_length;
 	const cc_u32f psg_ratio = CLOWNRESAMPLER_TO_FIXED_POINT_FROM_INTEGER(available_psg_frames) / adjusted_output_length;
 	const cc_u32f pcm_ratio = CLOWNRESAMPLER_TO_FIXED_POINT_FROM_INTEGER(available_pcm_frames) / adjusted_output_length;
+	const cc_u32f cdda_ratio = CLOWNRESAMPLER_TO_FIXED_POINT_FROM_INTEGER(available_cdda_frames) / adjusted_output_length;
 
 	MIXER_FORMAT output_buffer[CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(48000)][MIXER_FM_CHANNEL_COUNT];
 	cc_s16l (*output_buffer_pointer)[MIXER_FM_CHANNEL_COUNT] = output_buffer;
@@ -400,7 +414,8 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 #if 0 /* This isn't necessary, right? */
 	ClownResampler_LowestLevel_Configure(&mixer->state->fm_resampler, Mixer_MulDiv(mixer->state->fm_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->low_pass_filter_sample_rate);
 	ClownResampler_LowestLevel_Configure(&mixer->state->psg_resampler, Mixer_MulDiv(mixer->state->psg_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->low_pass_filter_sample_rate);
-	ClownResampler_LowestLevel_Configure(&mixer->state->pcm_resampler, Mixer_MulDiv(mixer->state->pcm_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->low_pass_filter_sample_rate);
+	ClownResampler_LowestLevel_Configure(&mixer->state->pcm_resampler, Mixer_MulDiv(mixer->state->pcm_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->output_sample_rate);
+	ClownResampler_LowestLevel_Configure(&mixer->state->cdda_resampler, Mixer_MulDiv(mixer->state->cdda_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->output_sample_rate);
 #endif
 
 	/* Resample, mix, and output the audio for this frame. */
@@ -409,14 +424,16 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 		cc_s32f fm_frame[MIXER_FM_CHANNEL_COUNT];
 		cc_s32f psg_frame[MIXER_PSG_CHANNEL_COUNT];
 		cc_s32f pcm_frame[MIXER_PCM_CHANNEL_COUNT];
+		cc_s32f cdda_frame[MIXER_CDDA_CHANNEL_COUNT];
 
 		Mixer_Source_GetFrame(&mixer->state->fm, &mixer->constant->resampler_precomputed, fm_frame, i * fm_ratio);
 		Mixer_Source_GetFrame(&mixer->state->psg, &mixer->constant->resampler_precomputed, psg_frame, i * psg_ratio);
 		Mixer_Source_GetFrame(&mixer->state->pcm, &mixer->constant->resampler_precomputed, pcm_frame, i * pcm_ratio);
+		Mixer_Source_GetFrame(&mixer->state->cdda, &mixer->constant->resampler_precomputed, cdda_frame, i * cdda_ratio);
 
-		/* Mix the FM, PSG, and PCM to produce the final audio. */
-		(*output_buffer_pointer)[0] = fm_frame[0] / (1 << 1) + psg_frame[0] / (1 << 4) + pcm_frame[0] / (1 << 3);
-		(*output_buffer_pointer)[1] = fm_frame[1] / (1 << 1) + psg_frame[0] / (1 << 4) + pcm_frame[1] / (1 << 3);
+		/* Mix the FM, PSG, PCM, and CDDA to produce the final audio. */
+		(*output_buffer_pointer)[0] = fm_frame[0] / (1 << 1) + psg_frame[0] / (1 << 4) + pcm_frame[0] / (1 << 3) + cdda_frame[0] / (1 << 3);
+		(*output_buffer_pointer)[1] = fm_frame[1] / (1 << 1) + psg_frame[0] / (1 << 4) + pcm_frame[1] / (1 << 3) + cdda_frame[1] / (1 << 3);
 		++output_buffer_pointer;
 
 		if (output_buffer_pointer == &output_buffer[CC_COUNT_OF(output_buffer)])
