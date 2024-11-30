@@ -23,3 +23,6 @@
 [submodule "clownmdemu"]
 	path = clownmdemu
 	url = https://github.com/Clownacy/clownmdemu
+[submodule "clowncd"]
+	path = clowncd
+	url = https://github.com/Clownacy/clowncd
