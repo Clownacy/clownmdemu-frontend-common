@@ -53,6 +53,7 @@ cc_bool CDReader_PlayAudio(CDReader_State *state, CDReader_TrackIndex track_inde
 cc_u32f CDReader_ReadAudio(CDReader_State *state, cc_s16l *sample_buffer, cc_u32f total_frames);
 void CDReader_GetStateBackup(CDReader_State *state, CDReader_StateBackup *backup);
 cc_bool CDReader_SetStateBackup(CDReader_State *state, const CDReader_StateBackup *backup);
+cc_bool CDReader_IsMegaCDGame(CDReader_State *state);
 
 #ifdef __cplusplus
 }
