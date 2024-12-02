@@ -78,8 +78,7 @@ cc_bool CDReader_ReadSectorAt(CDReader_State* const state, CDReader_Sector* cons
 		if (CDReader_SeekToSector(state, sector_index) && ClownCD_ReadSector(&state->clowncd, *sector))
 			success = cc_true;
 
-		if (!CDReader_SetStateBackup(state, &backup))
-			success = cc_false;
+		CDReader_SetStateBackup(state, &backup);
 	}
 
 	if (!success)
