@@ -53,31 +53,39 @@ cc_bool CDReader_SeekToSector(CDReader_State* const state, const CDReader_Sector
 	return ClownCD_SeekSector(&state->clowncd, sector_index);
 }
 
-void CDReader_ReadSector(CDReader_State* const state, CDReader_Sector* const sector)
+cc_bool CDReader_ReadSector(CDReader_State* const state, CDReader_Sector* const sector)
 {
-	if (!CDReader_IsOpen(state))
-	{
-		memset(sector, 0, sizeof(*sector));
-		return;
-	}
+	cc_bool success = cc_false;
 
-	ClownCD_ReadSector(&state->clowncd, *sector);
+	if (CDReader_IsOpen(state) && ClownCD_ReadSector(&state->clowncd, *sector))
+		success = cc_true;
+
+	if (!success)
+		memset(sector, 0, sizeof(*sector));
+
+	return success;
 }
 
-void CDReader_ReadSectorAt(CDReader_State* const state, CDReader_Sector* const sector, const CDReader_SectorIndex sector_index)
+cc_bool CDReader_ReadSectorAt(CDReader_State* const state, CDReader_Sector* const sector, const CDReader_SectorIndex sector_index)
 {
-	CDReader_StateBackup backup;
+	cc_bool success = cc_false;
 
-	if (!CDReader_IsOpen(state))
+	if (CDReader_IsOpen(state))
 	{
-		memset(sector, 0, sizeof(*sector));
-		return;
+		CDReader_StateBackup backup;
+		CDReader_GetStateBackup(state, &backup);
+
+		if (CDReader_SeekToSector(state, sector_index) && ClownCD_ReadSector(&state->clowncd, *sector))
+			success = cc_true;
+
+		if (!CDReader_SetStateBackup(state, &backup))
+			success = cc_false;
 	}
 
-	CDReader_GetStateBackup(state, &backup);
-	CDReader_SeekToSector(state, sector_index);
-	ClownCD_ReadSector(&state->clowncd, *sector);
-	CDReader_SetStateBackup(state, &backup);
+	if (!success)
+		memset(sector, 0, sizeof(*sector));
+
+	return success;
 }
 
 cc_bool CDReader_PlayAudio(CDReader_State* const state, const CDReader_TrackIndex track_index, const CDReader_PlaybackSetting setting)
