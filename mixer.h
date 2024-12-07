@@ -9,6 +9,7 @@
 #define CLOWNRESAMPLER_STATIC
 #define CLOWNRESAMPLER_NO_HIGH_LEVEL_API
 #define CLOWNRESAMPLER_NO_LOW_LEVEL_API
+#define CLOWNRESAMPLER_MAXIMUM_CHANNELS 2 /* We only need stereo. */
 #include "clownresampler/clownresampler.h"
 
 #define MIXER_FM_CHANNEL_COUNT 2
