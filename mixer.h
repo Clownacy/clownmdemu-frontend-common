@@ -1,7 +1,7 @@
 #include <stddef.h>
 
-#include "clownmdemu/clowncommon/clowncommon.h"
-#include "clownmdemu/clownmdemu.h"
+#include "core/clowncommon/clowncommon.h"
+#include "core/clownmdemu.h"
 
 #ifndef MIXER_HEADER
 #define MIXER_HEADER

@@ -21,7 +21,7 @@
 	path = clown68000
 	url = https://github.com/Clownacy/clown68000
 [submodule "clownmdemu"]
-	path = clownmdemu
+	path = core
 	url = https://github.com/Clownacy/clownmdemu
 [submodule "clowncd"]
 	path = clowncd
