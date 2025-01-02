@@ -53,38 +53,38 @@ cc_bool CDReader_SeekToSector(CDReader_State* const state, const CDReader_Sector
 	return ClownCD_SeekSector(&state->clowncd, sector_index);
 }
 
-cc_bool CDReader_ReadSector(CDReader_State* const state, CDReader_Sector* const sector)
+static cc_bool AttemptReadSector(CDReader_State* const state, cc_u16l* const buffer)
 {
-	cc_bool success = cc_false;
+	cc_u16f i;
 
-	if (CDReader_IsOpen(state) && ClownCD_ReadSector(&state->clowncd, *sector))
-		success = cc_true;
+	if (!ClownCD_BeginSectorStream(&state->clowncd))
+		return cc_false;
 
-	if (!success)
-		memset(sector, 0, sizeof(*sector));
-
-	return success;
-}
-
-cc_bool CDReader_ReadSectorAt(CDReader_State* const state, CDReader_Sector* const sector, const CDReader_SectorIndex sector_index)
-{
-	cc_bool success = cc_false;
-
-	if (CDReader_IsOpen(state))
+	for (i = 0; i < CDREADER_SECTOR_SIZE / 2; ++i)
 	{
-		CDReader_StateBackup backup;
-		CDReader_GetStateBackup(state, &backup);
+		unsigned char bytes[2];
 
-		if (CDReader_SeekToSector(state, sector_index) && ClownCD_ReadSector(&state->clowncd, *sector))
-			success = cc_true;
+		if (!ClownCD_ReadSectorStream(&state->clowncd, bytes, CC_COUNT_OF(bytes)))
+			return cc_false;
 
-		CDReader_SetStateBackup(state, &backup);
+		buffer[i] = (cc_u16l)bytes[0] << 8 | bytes[1];
 	}
 
-	if (!success)
-		memset(sector, 0, sizeof(*sector));
+	if (!ClownCD_EndSectorStream(&state->clowncd))
+		return cc_false;
 
-	return success;
+	return cc_true;
+}
+
+cc_bool CDReader_ReadSector(CDReader_State* const state, cc_u16l* const buffer)
+{
+	if (!CDReader_IsOpen(state) || !AttemptReadSector(state, buffer))
+	{
+		memset(buffer, 0, CDREADER_SECTOR_SIZE / 2 * sizeof(cc_u16l));
+		return cc_false;
+	}
+
+	return cc_true;
 }
 
 cc_bool CDReader_PlayAudio(CDReader_State* const state, const CDReader_TrackIndex track_index, const CDReader_PlaybackSetting setting)
@@ -177,11 +177,32 @@ cc_bool CDReader_SetStateBackup(CDReader_State* const state, const CDReader_Stat
 	return cc_true;
 }
 
+cc_bool CDReader_ReadMegaCDHeaderSector(CDReader_State* const state, unsigned char* const buffer)
+{
+	cc_bool success = cc_false;
+
+	if (CDReader_IsOpen(state))
+	{
+		CDReader_StateBackup backup;
+		CDReader_GetStateBackup(state, &backup);
+
+		if (CDReader_SeekToSector(state, 0) && ClownCD_ReadSector(&state->clowncd, buffer))
+			success = cc_true;
+
+		CDReader_SetStateBackup(state, &backup);
+	}
+
+	if (!success)
+		memset(buffer, 0, CDREADER_SECTOR_SIZE);
+
+	return success;
+}
+
 cc_bool CDReader_IsMegaCDGame(CDReader_State* const state)
 {
-	static const char disc_identifier[] = {'S', 'E', 'G', 'A', 'D', 'I', 'S', 'C', 'S', 'Y', 'S', 'T', 'E', 'M'};
-	CDReader_Sector first_sector;
+	static const unsigned char disc_identifier[] = {'S', 'E', 'G', 'A', 'D', 'I', 'S', 'C', 'S', 'Y', 'S', 'T', 'E', 'M'};
+	unsigned char first_sector[CDREADER_SECTOR_SIZE];
 
-	CDReader_ReadSectorAt(state, &first_sector, 0);
+	CDReader_ReadMegaCDHeaderSector(state, first_sector);
 	return memcmp(first_sector, disc_identifier, sizeof(disc_identifier)) == 0;
 }
