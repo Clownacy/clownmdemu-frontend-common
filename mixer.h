@@ -6,10 +6,6 @@
 #ifndef MIXER_HEADER
 #define MIXER_HEADER
 
-#define CLOWNRESAMPLER_STATIC
-#define CLOWNRESAMPLER_NO_HIGH_LEVEL_API
-#define CLOWNRESAMPLER_NO_LOW_LEVEL_API
-#define CLOWNRESAMPLER_MAXIMUM_CHANNELS 2 /* We only need stereo. */
 #include "clownresampler/clownresampler.h"
 
 #define MIXER_FM_CHANNEL_COUNT 2
@@ -51,9 +47,6 @@ typedef struct Mixer
 #endif /* MIXER_HEADER */
 
 #ifdef MIXER_IMPLEMENTATION
-
-#define CLOWNRESAMPLER_IMPLEMENTATION
-#include "clownresampler/clownresampler.h"
 
 #ifndef MIXER_ASSERT
 #include <assert.h>
