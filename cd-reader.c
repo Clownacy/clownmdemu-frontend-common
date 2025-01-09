@@ -53,38 +53,41 @@ cc_bool CDReader_SeekToSector(CDReader_State* const state, const CDReader_Sector
 	return ClownCD_SeekSector(&state->clowncd, sector_index);
 }
 
-static cc_bool AttemptReadSector(CDReader_State* const state, cc_u16l* const buffer)
+static size_t AttemptReadSector(CDReader_State* const state, cc_u16l* const buffer)
 {
 	cc_u16f i;
 
 	if (!ClownCD_BeginSectorStream(&state->clowncd))
-		return cc_false;
+		return 0;
 
 	for (i = 0; i < CDREADER_SECTOR_SIZE / 2; ++i)
 	{
 		unsigned char bytes[2];
 
-		if (!ClownCD_ReadSectorStream(&state->clowncd, bytes, CC_COUNT_OF(bytes)))
-			return cc_false;
+		/* Sanely handle a partial read. */
+		bytes[1] = 0;
+
+		if (ClownCD_ReadSectorStream(&state->clowncd, bytes, CC_COUNT_OF(bytes)) == 0)
+			break;
 
 		buffer[i] = (cc_u16l)bytes[0] << 8 | bytes[1];
 	}
 
-	if (!ClownCD_EndSectorStream(&state->clowncd))
-		return cc_false;
+	ClownCD_EndSectorStream(&state->clowncd);
 
-	return cc_true;
+	return i;
 }
 
 cc_bool CDReader_ReadSector(CDReader_State* const state, cc_u16l* const buffer)
 {
-	if (!CDReader_IsOpen(state) || !AttemptReadSector(state, buffer))
-	{
-		memset(buffer, 0, CDREADER_SECTOR_SIZE / 2 * sizeof(cc_u16l));
-		return cc_false;
-	}
+	size_t words_read = 0;
 
-	return cc_true;
+	if (CDReader_IsOpen(state))
+		words_read = AttemptReadSector(state, buffer);
+
+	memset(buffer + words_read, 0, (CDREADER_SECTOR_SIZE / 2 - words_read) * sizeof(cc_u16l));
+
+	return words_read != 0;
 }
 
 cc_bool CDReader_PlayAudio(CDReader_State* const state, const CDReader_TrackIndex track_index, const CDReader_PlaybackSetting setting)
