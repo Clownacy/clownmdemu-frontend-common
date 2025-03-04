@@ -243,9 +243,9 @@ static cc_u32f Mixer_MulDiv(const cc_u32f a, const cc_u32f b, const cc_u32f c)
 
 /* Mixer Source */
 
-static cc_bool Mixer_Source_Initialise(Mixer_Source* const source, const cc_u8f channels, const cc_u32f input_sample_rate, const cc_u32f output_sample_rate, const cc_u32f low_pass_filter_sample_rate)
+static cc_bool Mixer_Source_Initialise(Mixer_Source* const source, const cc_u8f channels, const cc_u32f input_sample_rate, const cc_u32f output_sample_rate)
 {
-	ClownResampler_LowestLevel_Configure(&source->resampler, input_sample_rate, output_sample_rate, low_pass_filter_sample_rate);
+	ClownResampler_LowestLevel_Configure(&source->resampler, input_sample_rate, output_sample_rate, output_sample_rate);
 
 	source->channels = channels;
 	/* The '+1' is just a lazy way of performing a rough ceiling division. */
@@ -312,7 +312,7 @@ static void Mixer_Constant_Initialise(Mixer_Constant* const constant)
 	ClownResampler_Precompute(&constant->resampler_precomputed);
 }
 
-static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_u32f output_sample_rate, const cc_bool pal_mode, const cc_bool low_pass_filter)
+static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_u32f output_sample_rate, const cc_bool pal_mode)
 {
 	/* TODO: De-duplicate this code. */
 	const cc_u32f fm_sample_rate = pal_mode
@@ -325,13 +325,11 @@ static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_u32f ou
 		? CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_PCM_SAMPLE_RATE))
 		: CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_PCM_SAMPLE_RATE));
 	const cc_u32f cdda_sample_rate = 44100;
-	const cc_u32f low_pass_filter_sample_rate = low_pass_filter ? 22000 : output_sample_rate;
 
-	/* Remember: Don't apply the low-pass filter to Mega CD audio! */
-	const cc_bool fm_success = Mixer_Source_Initialise(&state->fm, MIXER_FM_CHANNEL_COUNT, fm_sample_rate, output_sample_rate, low_pass_filter_sample_rate);
-	const cc_bool psg_success = Mixer_Source_Initialise(&state->psg, MIXER_PSG_CHANNEL_COUNT, psg_sample_rate, output_sample_rate, low_pass_filter_sample_rate);
-	const cc_bool pcm_success = Mixer_Source_Initialise(&state->pcm, MIXER_PCM_CHANNEL_COUNT, pcm_sample_rate, output_sample_rate, output_sample_rate);
-	const cc_bool cdda_success = Mixer_Source_Initialise(&state->cdda, MIXER_CDDA_CHANNEL_COUNT, cdda_sample_rate, output_sample_rate, output_sample_rate);
+	const cc_bool fm_success = Mixer_Source_Initialise(&state->fm, MIXER_FM_CHANNEL_COUNT, fm_sample_rate, output_sample_rate);
+	const cc_bool psg_success = Mixer_Source_Initialise(&state->psg, MIXER_PSG_CHANNEL_COUNT, psg_sample_rate, output_sample_rate);
+	const cc_bool pcm_success = Mixer_Source_Initialise(&state->pcm, MIXER_PCM_CHANNEL_COUNT, pcm_sample_rate, output_sample_rate);
+	const cc_bool cdda_success = Mixer_Source_Initialise(&state->cdda, MIXER_CDDA_CHANNEL_COUNT, cdda_sample_rate, output_sample_rate);
 
 	if (fm_success && psg_success && pcm_success && cdda_success)
 	{
@@ -406,8 +404,8 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 	cc_s16l (*output_buffer_pointer)[MIXER_FM_CHANNEL_COUNT] = output_buffer;
 
 #if 0 /* This isn't necessary, right? */
-	ClownResampler_LowestLevel_Configure(&mixer->state->fm_resampler, Mixer_MulDiv(mixer->state->fm_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->low_pass_filter_sample_rate);
-	ClownResampler_LowestLevel_Configure(&mixer->state->psg_resampler, Mixer_MulDiv(mixer->state->psg_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->low_pass_filter_sample_rate);
+	ClownResampler_LowestLevel_Configure(&mixer->state->fm_resampler, Mixer_MulDiv(mixer->state->fm_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->output_sample_rate);
+	ClownResampler_LowestLevel_Configure(&mixer->state->psg_resampler, Mixer_MulDiv(mixer->state->psg_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->output_sample_rate);
 	ClownResampler_LowestLevel_Configure(&mixer->state->pcm_resampler, Mixer_MulDiv(mixer->state->pcm_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->output_sample_rate);
 	ClownResampler_LowestLevel_Configure(&mixer->state->cdda_resampler, Mixer_MulDiv(mixer->state->cdda_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->output_sample_rate);
 #endif
