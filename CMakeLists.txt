@@ -12,4 +12,4 @@ add_subdirectory("clowncd" EXCLUDE_FROM_ALL)
 add_subdirectory("clownresampler" EXCLUDE_FROM_ALL)
 add_subdirectory("core" EXCLUDE_FROM_ALL)
 
-target_link_libraries(clownmdemu-frontend-common PRIVATE clowncd clownresampler clownmdemu-core)
+target_link_libraries(clownmdemu-frontend-common PUBLIC clowncd clownresampler clownmdemu-core)
