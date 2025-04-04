@@ -253,7 +253,7 @@ static void Mixer_End(const Mixer* const mixer, void (* const callback)(void *us
 	}
 
 	/* Push whatever samples remain in the output buffer. */
-	callback((void*)user_data, output_buffer, (output_buffer_pointer - output_buffer) / MIXER_CHANNEL_COUNT);
+	callback((void*)user_data, output_buffer, output_length);
 }
 
 #endif /* MIXER_IMPLEMENTATION */
