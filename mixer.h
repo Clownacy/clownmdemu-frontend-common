@@ -6,7 +6,7 @@
 #ifndef MIXER_HEADER
 #define MIXER_HEADER
 
-#define MIXER_OUTPUT_SAMPLE_RATE 48000
+#define MIXER_OUTPUT_SAMPLE_RATE CLOWNMDEMU_CDDA_SAMPLE_RATE
 #define MIXER_DIVIDE_BY_LOWEST_FRAMERATE CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE
 #define MIXER_MAXIMUM_AUDIO_FRAMES_PER_FRAME MIXER_DIVIDE_BY_LOWEST_FRAMERATE(MIXER_OUTPUT_SAMPLE_RATE)
 #define MIXER_CHANNEL_COUNT CC_MAX(CC_MAX(CC_MAX(CLOWNMDEMU_FM_CHANNEL_COUNT, CLOWNMDEMU_PSG_CHANNEL_COUNT), CLOWNMDEMU_PCM_CHANNEL_COUNT), CLOWNMDEMU_CDDA_CHANNEL_COUNT)
@@ -30,8 +30,6 @@ typedef struct Mixer_Source
 typedef struct Mixer_State
 {
 	Mixer_Source fm, psg, pcm, cdda;
-
-	cc_u32f output_length;
 } Mixer_State;
 
 typedef struct Mixer
@@ -168,11 +166,7 @@ static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_bool pa
 	const cc_bool cdda_success = Mixer_Source_Initialise(&state->cdda, CLOWNMDEMU_CDDA_CHANNEL_COUNT, cdda_sample_rate);
 
 	if (fm_success && psg_success && pcm_success && cdda_success)
-	{
-		state->output_length = DivideByFramerate(pal_mode, MIXER_OUTPUT_SAMPLE_RATE);
-
 		return cc_true;
-	}
 
 	if (fm_success)
 		Mixer_Source_Deinitialise(&state->fm);
@@ -231,32 +225,30 @@ static void Mixer_End(const Mixer* const mixer, void (* const callback)(void *us
 	const size_t available_psg_frames = Mixer_Source_GetTotalAllocatedFrames(&state->psg);
 	const size_t available_pcm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->pcm);
 	const size_t available_cdda_frames = Mixer_Source_GetTotalAllocatedFrames(&state->cdda);
-	const cc_u32f fm_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_fm_frames) / state->output_length;
-	const cc_u32f psg_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_psg_frames) / state->output_length;
-	const cc_u32f pcm_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_pcm_frames) / state->output_length;
-	const cc_u32f cdda_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_cdda_frames) / state->output_length;
+	const cc_u32f output_length = available_cdda_frames; /* Synchronise everything with CDDA, since it matches the output sample rate. */
+	const cc_u32f fm_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_fm_frames) / output_length;
+	const cc_u32f psg_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_psg_frames) / output_length;
+	const cc_u32f pcm_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_pcm_frames) / output_length;
 
 	MIXER_FORMAT output_buffer[MIXER_MAXIMUM_AUDIO_FRAMES_PER_FRAME][MIXER_CHANNEL_COUNT];
 	cc_s16l (*output_buffer_pointer)[MIXER_CHANNEL_COUNT] = output_buffer;
-	cc_u32f fm_position, psg_position, pcm_position, cdda_position;
+	cc_u32f fm_position, psg_position, pcm_position;
 	cc_u32f i;
 
 	/* Resample, mix, and output the audio for this frame. */
-	for (i = 0, fm_position = 0, psg_position = 0, pcm_position = 0, cdda_position = 0; i < state->output_length; ++i, fm_position += fm_ratio, psg_position += psg_ratio, pcm_position += pcm_ratio, cdda_position += cdda_ratio)
+	for (i = 0, fm_position = 0, psg_position = 0, pcm_position = 0; i < output_length; ++i, fm_position += fm_ratio, psg_position += psg_ratio, pcm_position += pcm_ratio)
 	{
 		cc_s32f fm_frame[CLOWNMDEMU_FM_CHANNEL_COUNT];
 		cc_s32f psg_frame[CLOWNMDEMU_PSG_CHANNEL_COUNT];
 		cc_s32f pcm_frame[CLOWNMDEMU_PCM_CHANNEL_COUNT];
-		cc_s32f cdda_frame[CLOWNMDEMU_CDDA_CHANNEL_COUNT];
 
 		Mixer_Source_GetFrame(&state->fm, fm_frame, fm_position);
 		Mixer_Source_GetFrame(&state->psg, psg_frame, psg_position);
 		Mixer_Source_GetFrame(&state->pcm, pcm_frame, pcm_position);
-		Mixer_Source_GetFrame(&state->cdda, cdda_frame, cdda_position);
 
 		/* Mix the FM, PSG, PCM, and CDDA to produce the final audio. */
-		(*output_buffer_pointer)[0] = fm_frame[0] / (1 << 1) + psg_frame[0] / (1 << 4) + pcm_frame[0] / (1 << 3) + cdda_frame[0] / (1 << 3);
-		(*output_buffer_pointer)[1] = fm_frame[1] / (1 << 1) + psg_frame[0] / (1 << 4) + pcm_frame[1] / (1 << 3) + cdda_frame[1] / (1 << 3);
+		(*output_buffer_pointer)[0] = fm_frame[0] / (1 << 1) + psg_frame[0] / (1 << 4) + pcm_frame[0] / (1 << 3) + state->cdda.buffer[i * 2 + 0] / (1 << 3);
+		(*output_buffer_pointer)[1] = fm_frame[1] / (1 << 1) + psg_frame[0] / (1 << 4) + pcm_frame[1] / (1 << 3) + state->cdda.buffer[i * 2 + 1] / (1 << 3);
 		++output_buffer_pointer;
 
 		if (output_buffer_pointer == &output_buffer[CC_COUNT_OF(output_buffer)])
