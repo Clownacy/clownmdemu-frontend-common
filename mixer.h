@@ -216,12 +216,15 @@ static void Mixer_End(Mixer_State* const state, void (* const callback)(void *us
 	const size_t available_psg_frames = Mixer_Source_GetTotalAllocatedFrames(&state->psg);
 	const size_t available_pcm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->pcm);
 	const size_t available_cdda_frames = Mixer_Source_GetTotalAllocatedFrames(&state->cdda);
-	const cc_u32f output_length = available_cdda_frames; /* Synchronise everything with CDDA, since it matches the output sample rate. */
+
+	/* By orienting everything around the CDDA, we avoid the need to resample the CDDA! */
+	cc_s16l* const output_buffer = state->cdda.buffer;
+	const cc_u32f output_length = available_cdda_frames;
+
 	const cc_u32f fm_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_fm_frames) / output_length;
 	const cc_u32f psg_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_psg_frames) / output_length;
 	const cc_u32f pcm_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_pcm_frames) / output_length;
 
-	cc_s16l* const output_buffer = state->cdda.buffer; /* Mix directly into the CDDA buffer. */
 	cc_s16l *output_buffer_pointer = output_buffer;
 	cc_u32f fm_position, psg_position, pcm_position;
 	cc_u32f i;
@@ -244,7 +247,7 @@ static void Mixer_End(Mixer_State* const state, void (* const callback)(void *us
 		++output_buffer_pointer;
 	}
 
-	/* Push whatever samples remain in the output buffer. */
+	/* Output resampled and mixed samples. */
 	callback((void*)user_data, output_buffer, output_length);
 }
 
