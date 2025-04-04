@@ -292,15 +292,16 @@ static size_t Mixer_Source_GetTotalAllocatedFrames(const Mixer_Source* const sou
 static void Mixer_Source_GetFrame(Mixer_Source* const source, cc_s32f* const frame, const cc_u32f position)
 {
 	const cc_u8f total_channels = source->channels;
+	const cc_u32f position_integral = position / MIXER_FIXED_POINT_FRACTIONAL_SIZE;
+	const cc_s32f position_fractional = position % MIXER_FIXED_POINT_FRACTIONAL_SIZE;
+	const cc_u32f frame_position = position_integral * total_channels;
 
 	cc_u8f i;
 
 	for (i = 0; i < total_channels; ++i)
 	{
 		/* Perform linear interpolation. */
-		const cc_u32f position_integral = position / MIXER_FIXED_POINT_FRACTIONAL_SIZE;
-		const cc_s32f position_fractional = position % MIXER_FIXED_POINT_FRACTIONAL_SIZE;
-		const cc_u32f sample_position = position_integral * total_channels + i;
+		const cc_u32f sample_position = frame_position + i;
 		const cc_s16f sample_base = source->buffer[sample_position];
 		const cc_s16f sample_delta = source->buffer[sample_position + total_channels] - sample_base;
 
