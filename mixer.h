@@ -6,9 +6,9 @@
 #ifndef MIXER_HEADER
 #define MIXER_HEADER
 
-#define MIXER_MAXIMUM_OUTPUT_SAMPLE_RATE 48000
+#define MIXER_OUTPUT_SAMPLE_RATE 48000
 #define MIXER_DIVIDE_BY_LOWEST_FRAMERATE CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE
-#define MIXER_MAXIMUM_AUDIO_FRAMES_PER_FRAME MIXER_DIVIDE_BY_LOWEST_FRAMERATE(MIXER_MAXIMUM_OUTPUT_SAMPLE_RATE)
+#define MIXER_MAXIMUM_AUDIO_FRAMES_PER_FRAME MIXER_DIVIDE_BY_LOWEST_FRAMERATE(MIXER_OUTPUT_SAMPLE_RATE)
 #define MIXER_CHANNEL_COUNT CC_MAX(CC_MAX(CC_MAX(CLOWNMDEMU_FM_CHANNEL_COUNT, CLOWNMDEMU_PSG_CHANNEL_COUNT), CLOWNMDEMU_PCM_CHANNEL_COUNT), CLOWNMDEMU_CDDA_CHANNEL_COUNT)
 
 #define MIXER_FIXED_POINT_FRACTIONAL_SIZE (1 << 16)
@@ -238,7 +238,7 @@ static cc_u32f Mixer_MulDiv(const cc_u32f a, const cc_u32f b, const cc_u32f c)
 
 /* Mixer Source */
 
-static cc_bool Mixer_Source_Initialise(Mixer_Source* const source, const cc_u8f channels, const cc_u32f input_sample_rate, const cc_u32f output_sample_rate)
+static cc_bool Mixer_Source_Initialise(Mixer_Source* const source, const cc_u8f channels, const cc_u32f input_sample_rate)
 {
 	source->channels = channels;
 	/* The '+1' is just a lazy way of performing a rough ceiling division. */
@@ -323,21 +323,21 @@ static cc_u32f DivideByFramerate(const cc_bool pal_mode, const cc_u32f value)
 	return pal_mode ? CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(value) : CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(value);
 }
 
-static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_u32f output_sample_rate, const cc_bool pal_mode)
+static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_bool pal_mode)
 {
 	const cc_u32f fm_sample_rate = GetCorrectedSampleRate(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC, CLOWNMDEMU_FM_SAMPLE_RATE_PAL, pal_mode);
 	const cc_u32f psg_sample_rate = GetCorrectedSampleRate(CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC, CLOWNMDEMU_PSG_SAMPLE_RATE_PAL, pal_mode);
 	const cc_u32f pcm_sample_rate = GetCorrectedSampleRate(CLOWNMDEMU_PCM_SAMPLE_RATE, CLOWNMDEMU_PCM_SAMPLE_RATE, pal_mode);
 	const cc_u32f cdda_sample_rate = GetCorrectedSampleRate(CLOWNMDEMU_CDDA_SAMPLE_RATE, CLOWNMDEMU_CDDA_SAMPLE_RATE, pal_mode);
 
-	const cc_bool fm_success = Mixer_Source_Initialise(&state->fm, CLOWNMDEMU_FM_CHANNEL_COUNT, fm_sample_rate, output_sample_rate);
-	const cc_bool psg_success = Mixer_Source_Initialise(&state->psg, CLOWNMDEMU_PSG_CHANNEL_COUNT, psg_sample_rate, output_sample_rate);
-	const cc_bool pcm_success = Mixer_Source_Initialise(&state->pcm, CLOWNMDEMU_PCM_CHANNEL_COUNT, pcm_sample_rate, output_sample_rate);
-	const cc_bool cdda_success = Mixer_Source_Initialise(&state->cdda, CLOWNMDEMU_CDDA_CHANNEL_COUNT, cdda_sample_rate, output_sample_rate);
+	const cc_bool fm_success = Mixer_Source_Initialise(&state->fm, CLOWNMDEMU_FM_CHANNEL_COUNT, fm_sample_rate);
+	const cc_bool psg_success = Mixer_Source_Initialise(&state->psg, CLOWNMDEMU_PSG_CHANNEL_COUNT, psg_sample_rate);
+	const cc_bool pcm_success = Mixer_Source_Initialise(&state->pcm, CLOWNMDEMU_PCM_CHANNEL_COUNT, pcm_sample_rate);
+	const cc_bool cdda_success = Mixer_Source_Initialise(&state->cdda, CLOWNMDEMU_CDDA_CHANNEL_COUNT, cdda_sample_rate);
 
 	if (fm_success && psg_success && pcm_success && cdda_success)
 	{
-		state->output_length = DivideByFramerate(pal_mode, output_sample_rate);
+		state->output_length = DivideByFramerate(pal_mode, MIXER_OUTPUT_SAMPLE_RATE);
 
 		return cc_true;
 	}
@@ -392,18 +392,17 @@ static cc_s16l* Mixer_AllocateCDDASamples(const Mixer* const mixer, const size_t
 	return Mixer_Source_AllocateFrames(&mixer->state->cdda, total_frames);
 }
 
-static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const cc_u32f denominator, void (* const callback)(void *user_data, const MIXER_FORMAT *audio_samples, size_t total_frames), const void* const user_data)
+static void Mixer_End(const Mixer* const mixer, void (* const callback)(void *user_data, const MIXER_FORMAT *audio_samples, size_t total_frames), const void* const user_data)
 {
 	Mixer_State* const state = mixer->state;
-	const cc_u32f adjusted_output_length = Mixer_MulDiv(state->output_length, denominator, numerator);
 	const size_t available_fm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->fm);
 	const size_t available_psg_frames = Mixer_Source_GetTotalAllocatedFrames(&state->psg);
 	const size_t available_pcm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->pcm);
 	const size_t available_cdda_frames = Mixer_Source_GetTotalAllocatedFrames(&state->cdda);
-	const cc_u32f fm_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_fm_frames) / adjusted_output_length;
-	const cc_u32f psg_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_psg_frames) / adjusted_output_length;
-	const cc_u32f pcm_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_pcm_frames) / adjusted_output_length;
-	const cc_u32f cdda_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_cdda_frames) / adjusted_output_length;
+	const cc_u32f fm_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_fm_frames) / state->output_length;
+	const cc_u32f psg_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_psg_frames) / state->output_length;
+	const cc_u32f pcm_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_pcm_frames) / state->output_length;
+	const cc_u32f cdda_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_cdda_frames) / state->output_length;
 
 	MIXER_FORMAT output_buffer[MIXER_MAXIMUM_AUDIO_FRAMES_PER_FRAME][MIXER_CHANNEL_COUNT];
 	cc_s16l (*output_buffer_pointer)[MIXER_CHANNEL_COUNT] = output_buffer;
@@ -418,7 +417,7 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 #endif
 
 	/* Resample, mix, and output the audio for this frame. */
-	for (i = 0, fm_position = 0, psg_position = 0, pcm_position = 0, cdda_position = 0; i < adjusted_output_length; ++i, fm_position += fm_ratio, psg_position += psg_ratio, pcm_position += pcm_ratio, cdda_position += cdda_ratio)
+	for (i = 0, fm_position = 0, psg_position = 0, pcm_position = 0, cdda_position = 0; i < state->output_length; ++i, fm_position += fm_ratio, psg_position += psg_ratio, pcm_position += pcm_ratio, cdda_position += cdda_ratio)
 	{
 		cc_s32f fm_frame[CLOWNMDEMU_FM_CHANNEL_COUNT];
 		cc_s32f psg_frame[CLOWNMDEMU_PSG_CHANNEL_COUNT];
