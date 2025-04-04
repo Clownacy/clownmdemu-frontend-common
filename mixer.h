@@ -14,10 +14,6 @@
 #define MIXER_TO_FIXED_POINT_FROM_INTEGER(X) ((X) * MIXER_FIXED_POINT_FRACTIONAL_SIZE)
 #define MIXER_FIXED_POINT_MULTIPLY(MULTIPLICAND, MULTIPLIER) ((MULTIPLICAND) * (MULTIPLIER) / MIXER_FIXED_POINT_FRACTIONAL_SIZE)
 
-#ifndef MIXER_FORMAT
-#error "You need to define MIXER_FORMAT before including `mixer.h`."
-#endif
-
 typedef struct Mixer_Source
 {
 	cc_u8f channels;
@@ -67,7 +63,7 @@ static cc_bool Mixer_Source_Initialise(Mixer_Source* const source, const cc_u8f 
 	source->channels = channels;
 	/* The '+1' is just a lazy way of performing a rough ceiling division. */
 	source->capacity = 1 + MIXER_DIVIDE_BY_LOWEST_FRAMERATE(input_sample_rate);
-	source->buffer = (cc_s16l*)MIXER_CALLOC(1, (1 + source->capacity) * source->channels * sizeof(MIXER_FORMAT));
+	source->buffer = (cc_s16l*)MIXER_CALLOC(1, (1 + source->capacity) * source->channels * sizeof(cc_s16l));
 	source->write_index = 0;
 
 	return source->buffer != NULL;
@@ -78,7 +74,7 @@ static void Mixer_Source_Deinitialise(Mixer_Source* const source)
 	MIXER_FREE(source->buffer);
 }
 
-static MIXER_FORMAT* Mixer_Source_Buffer(Mixer_Source* const source, const size_t index)
+static cc_s16l* Mixer_Source_Buffer(Mixer_Source* const source, const size_t index)
 {
 	return &source->buffer[index * source->channels];
 }
@@ -89,10 +85,10 @@ static void Mixer_Source_NewFrame(Mixer_Source* const source)
 	/* See clownresampler's documentation for more information. */
 
 	/* Copy the end of each buffer to its beginning, since we never used all of it. */
-	MIXER_MEMMOVE(source->buffer, Mixer_Source_Buffer(source, source->write_index), 1 * source->channels * sizeof(MIXER_FORMAT));
+	MIXER_MEMMOVE(source->buffer, Mixer_Source_Buffer(source, source->write_index), 1 * source->channels * sizeof(cc_s16l));
 
 	/* Blank the remainder of the buffers so that they can be mixed into. */
-	MIXER_MEMSET(Mixer_Source_Buffer(source, 1), 0, source->write_index * source->channels * sizeof(MIXER_FORMAT));
+	MIXER_MEMSET(Mixer_Source_Buffer(source, 1), 0, source->write_index * source->channels * sizeof(cc_s16l));
 
 	source->write_index = 0;
 }
@@ -205,7 +201,7 @@ static cc_s16l* Mixer_AllocateCDDASamples(Mixer_State* const state, const size_t
 	return Mixer_Source_AllocateFrames(&state->cdda, total_frames);
 }
 
-static void Mixer_End(Mixer_State* const state, void (* const callback)(void *user_data, const MIXER_FORMAT *audio_samples, size_t total_frames), const void* const user_data)
+static void Mixer_End(Mixer_State* const state, void (* const callback)(void *user_data, const cc_s16l *audio_samples, size_t total_frames), const void* const user_data)
 {
 	const size_t available_fm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->fm);
 	const size_t available_psg_frames = Mixer_Source_GetTotalAllocatedFrames(&state->psg);
