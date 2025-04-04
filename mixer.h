@@ -300,8 +300,21 @@ static size_t Mixer_Source_GetTotalAllocatedFrames(const Mixer_Source* const sou
 
 static void Mixer_Source_GetFrame(Mixer_Source* const source, const ClownResampler_Precomputed* const precomputed, cc_s32f* const frame, const cc_u32f position)
 {
-	MIXER_MEMSET(frame, 0, source->channels * sizeof(*frame));
-	ClownResampler_LowestLevel_Resample(&source->resampler, precomputed, frame, source->channels, source->buffer, CLOWNRESAMPLER_TO_INTEGER_FROM_FIXED_POINT_FLOOR(position), position % CLOWNRESAMPLER_FIXED_POINT_FRACTIONAL_SIZE);
+	const cc_u8f total_channels = source->channels;
+
+	cc_u8f i;
+
+	for (i = 0; i < total_channels; ++i)
+	{
+		/* Perform linear interpolation. */
+		const cc_u32f position_integral = position / CLOWNRESAMPLER_FIXED_POINT_FRACTIONAL_SIZE;
+		const cc_s32f position_fractional = position % CLOWNRESAMPLER_FIXED_POINT_FRACTIONAL_SIZE;
+		const cc_u32f sample_position = position_integral * total_channels + i;
+		const cc_s16f sample_base = source->buffer[sample_position];
+		const cc_s16f sample_delta = source->buffer[sample_position + total_channels] - sample_base;
+
+		frame[i] = sample_base + CLOWNRESAMPLER_FIXED_POINT_MULTIPLY(sample_delta, position_fractional);
+	}
 }
 
 /* Mixer API */
