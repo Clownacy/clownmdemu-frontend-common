@@ -7,9 +7,8 @@
 #define MIXER_HEADER
 
 #define MIXER_OUTPUT_SAMPLE_RATE CLOWNMDEMU_CDDA_SAMPLE_RATE
+#define MIXER_CHANNEL_COUNT CLOWNMDEMU_CDDA_CHANNEL_COUNT
 #define MIXER_DIVIDE_BY_LOWEST_FRAMERATE CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE
-#define MIXER_MAXIMUM_AUDIO_FRAMES_PER_FRAME MIXER_DIVIDE_BY_LOWEST_FRAMERATE(MIXER_OUTPUT_SAMPLE_RATE)
-#define MIXER_CHANNEL_COUNT CC_MAX(CC_MAX(CC_MAX(CLOWNMDEMU_FM_CHANNEL_COUNT, CLOWNMDEMU_PSG_CHANNEL_COUNT), CLOWNMDEMU_PCM_CHANNEL_COUNT), CLOWNMDEMU_CDDA_CHANNEL_COUNT)
 
 #define MIXER_FIXED_POINT_FRACTIONAL_SIZE (1 << 16)
 #define MIXER_TO_FIXED_POINT_FROM_INTEGER(X) ((X) * MIXER_FIXED_POINT_FRACTIONAL_SIZE)
@@ -230,8 +229,8 @@ static void Mixer_End(const Mixer* const mixer, void (* const callback)(void *us
 	const cc_u32f psg_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_psg_frames) / output_length;
 	const cc_u32f pcm_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_pcm_frames) / output_length;
 
-	MIXER_FORMAT output_buffer[MIXER_MAXIMUM_AUDIO_FRAMES_PER_FRAME][MIXER_CHANNEL_COUNT];
-	cc_s16l (*output_buffer_pointer)[MIXER_CHANNEL_COUNT] = output_buffer;
+	cc_s16l* const output_buffer = state->cdda.buffer; /* Mix directly into the CDDA buffer. */
+	cc_s16l *output_buffer_pointer = output_buffer;
 	cc_u32f fm_position, psg_position, pcm_position;
 	cc_u32f i;
 
@@ -247,20 +246,14 @@ static void Mixer_End(const Mixer* const mixer, void (* const callback)(void *us
 		Mixer_Source_GetFrame(&state->pcm, pcm_frame, pcm_position);
 
 		/* Mix the FM, PSG, PCM, and CDDA to produce the final audio. */
-		(*output_buffer_pointer)[0] = fm_frame[0] / (1 << 1) + psg_frame[0] / (1 << 4) + pcm_frame[0] / (1 << 3) + state->cdda.buffer[i * 2 + 0] / (1 << 3);
-		(*output_buffer_pointer)[1] = fm_frame[1] / (1 << 1) + psg_frame[0] / (1 << 4) + pcm_frame[1] / (1 << 3) + state->cdda.buffer[i * 2 + 1] / (1 << 3);
+		*output_buffer_pointer = fm_frame[0] / (1 << 1) + psg_frame[0] / (1 << 4) + pcm_frame[0] / (1 << 3) + *output_buffer_pointer / (1 << 3);
 		++output_buffer_pointer;
-
-		if (output_buffer_pointer == &output_buffer[CC_COUNT_OF(output_buffer)])
-		{
-			/* The buffer is full, so flush it. */
-			callback((void*)user_data, &output_buffer[0][0], CC_COUNT_OF(output_buffer));
-			output_buffer_pointer = output_buffer;
-		}
+		*output_buffer_pointer = fm_frame[1] / (1 << 1) + psg_frame[0] / (1 << 4) + pcm_frame[1] / (1 << 3) + *output_buffer_pointer / (1 << 3);
+		++output_buffer_pointer;
 	}
 
 	/* Push whatever samples remain in the output buffer. */
-	callback((void*)user_data, &output_buffer[0][0], output_buffer_pointer - output_buffer);
+	callback((void*)user_data, output_buffer, (output_buffer_pointer - output_buffer) / MIXER_CHANNEL_COUNT);
 }
 
 #endif /* MIXER_IMPLEMENTATION */
