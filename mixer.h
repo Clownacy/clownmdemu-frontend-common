@@ -13,6 +13,10 @@
 #define MIXER_PCM_CHANNEL_COUNT 2
 #define MIXER_CDDA_CHANNEL_COUNT 2
 
+#define MIXER_MAXIMUM_OUTPUT_SAMPLE_RATE 48000
+#define MIXER_DIVIDE_BY_LOWEST_FRAMERATE CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE
+#define MIXER_MAXIMUM_AUDIO_FRAMES_PER_FRAME MIXER_DIVIDE_BY_LOWEST_FRAMERATE(MIXER_MAXIMUM_OUTPUT_SAMPLE_RATE)
+
 #ifndef MIXER_FORMAT
 #error "You need to define MIXER_FORMAT before including `mixer.h`."
 #endif
@@ -249,7 +253,7 @@ static cc_bool Mixer_Source_Initialise(Mixer_Source* const source, const cc_u8f 
 
 	source->channels = channels;
 	/* The '+1' is just a lazy way of performing a rough ceiling division. */
-	source->capacity = 1 + CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(input_sample_rate);
+	source->capacity = 1 + MIXER_DIVIDE_BY_LOWEST_FRAMERATE(input_sample_rate);
 	source->buffer = (cc_s16l*)MIXER_CALLOC(1, (source->resampler.integer_stretched_kernel_radius * 2 + source->capacity) * source->channels * sizeof(MIXER_FORMAT));
 	source->write_index = 0;
 
@@ -312,19 +316,19 @@ static void Mixer_Constant_Initialise(Mixer_Constant* const constant)
 	ClownResampler_Precompute(&constant->resampler_precomputed);
 }
 
+static cc_u32f GetCorrectedSampleRate(const cc_u32f sample_rate_ntsc, const cc_u32f sample_rate_pal, const cc_bool pal_mode)
+{
+	return pal_mode
+		? CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(sample_rate_pal))
+		: CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(sample_rate_ntsc));
+}
+
 static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_u32f output_sample_rate, const cc_bool pal_mode)
 {
-	/* TODO: De-duplicate this code. */
-	const cc_u32f fm_sample_rate = pal_mode
-		? CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_PAL))
-		: CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC));
-	const cc_u32f psg_sample_rate = pal_mode
-		? CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_PAL))
-		: CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC));
-	const cc_u32f pcm_sample_rate = pal_mode
-		? CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(CLOWNMDEMU_PCM_SAMPLE_RATE))
-		: CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(CLOWNMDEMU_PCM_SAMPLE_RATE));
-	const cc_u32f cdda_sample_rate = 44100;
+	const cc_u32f fm_sample_rate = GetCorrectedSampleRate(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC, CLOWNMDEMU_FM_SAMPLE_RATE_PAL, pal_mode);
+	const cc_u32f psg_sample_rate = GetCorrectedSampleRate(CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC, CLOWNMDEMU_PSG_SAMPLE_RATE_PAL, pal_mode);
+	const cc_u32f pcm_sample_rate = GetCorrectedSampleRate(CLOWNMDEMU_PCM_SAMPLE_RATE, CLOWNMDEMU_PCM_SAMPLE_RATE, pal_mode);
+	const cc_u32f cdda_sample_rate = GetCorrectedSampleRate(CLOWNMDEMU_CDDA_SAMPLE_RATE, CLOWNMDEMU_CDDA_SAMPLE_RATE, pal_mode);
 
 	const cc_bool fm_success = Mixer_Source_Initialise(&state->fm, MIXER_FM_CHANNEL_COUNT, fm_sample_rate, output_sample_rate);
 	const cc_bool psg_success = Mixer_Source_Initialise(&state->psg, MIXER_PSG_CHANNEL_COUNT, psg_sample_rate, output_sample_rate);
@@ -400,7 +404,7 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 	const cc_u32f pcm_ratio = CLOWNRESAMPLER_TO_FIXED_POINT_FROM_INTEGER(available_pcm_frames) / adjusted_output_length;
 	const cc_u32f cdda_ratio = CLOWNRESAMPLER_TO_FIXED_POINT_FROM_INTEGER(available_cdda_frames) / adjusted_output_length;
 
-	MIXER_FORMAT output_buffer[CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(48000)][MIXER_FM_CHANNEL_COUNT];
+	MIXER_FORMAT output_buffer[MIXER_MAXIMUM_AUDIO_FRAMES_PER_FRAME][MIXER_FM_CHANNEL_COUNT];
 	cc_s16l (*output_buffer_pointer)[MIXER_FM_CHANNEL_COUNT] = output_buffer;
 
 #if 0 /* This isn't necessary, right? */
