@@ -246,9 +246,9 @@ static void Mixer_End(const Mixer* const mixer, void (* const callback)(void *us
 		Mixer_Source_GetFrame(&state->pcm, pcm_frame, pcm_position);
 
 		/* Mix the FM, PSG, PCM, and CDDA to produce the final audio. */
-		*output_buffer_pointer = fm_frame[0] / (1 << 1) + psg_frame[0] / (1 << 4) + pcm_frame[0] / (1 << 3) + *output_buffer_pointer / (1 << 3);
+		*output_buffer_pointer = fm_frame[0] / CLOWNMDEMU_FM_VOLUME_DIVISOR + psg_frame[0] / CLOWNMDEMU_PSG_VOLUME_DIVISOR + pcm_frame[0] / CLOWNMDEMU_PCM_VOLUME_DIVISOR + *output_buffer_pointer / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
 		++output_buffer_pointer;
-		*output_buffer_pointer = fm_frame[1] / (1 << 1) + psg_frame[0] / (1 << 4) + pcm_frame[1] / (1 << 3) + *output_buffer_pointer / (1 << 3);
+		*output_buffer_pointer = fm_frame[1] / CLOWNMDEMU_FM_VOLUME_DIVISOR + psg_frame[0] / CLOWNMDEMU_PSG_VOLUME_DIVISOR + pcm_frame[1] / CLOWNMDEMU_PCM_VOLUME_DIVISOR + *output_buffer_pointer / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
 		++output_buffer_pointer;
 	}
 
