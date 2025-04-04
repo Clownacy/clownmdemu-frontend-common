@@ -31,11 +31,6 @@ typedef struct Mixer_State
 	Mixer_Source fm, psg, pcm, cdda;
 } Mixer_State;
 
-typedef struct Mixer
-{
-	Mixer_State *state;
-} Mixer;
-
 #endif /* MIXER_HEADER */
 
 #ifdef MIXER_IMPLEMENTATION
@@ -152,7 +147,7 @@ static cc_u32f DivideByFramerate(const cc_bool pal_mode, const cc_u32f value)
 	return pal_mode ? CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(value) : CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(value);
 }
 
-static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_bool pal_mode)
+static cc_bool Mixer_Initialise(Mixer_State* const state, const cc_bool pal_mode)
 {
 	const cc_u32f fm_sample_rate = GetCorrectedSampleRate(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC, CLOWNMDEMU_FM_SAMPLE_RATE_PAL, pal_mode);
 	const cc_u32f psg_sample_rate = GetCorrectedSampleRate(CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC, CLOWNMDEMU_PSG_SAMPLE_RATE_PAL, pal_mode);
@@ -179,7 +174,7 @@ static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_bool pa
 	return cc_false;
 }
 
-static void Mixer_State_Deinitialise(Mixer_State* const state)
+static void Mixer_Deinitialise(Mixer_State* const state)
 {
 	Mixer_Source_Deinitialise(&state->fm);
 	Mixer_Source_Deinitialise(&state->psg);
@@ -187,39 +182,36 @@ static void Mixer_State_Deinitialise(Mixer_State* const state)
 	Mixer_Source_Deinitialise(&state->cdda);
 }
 
-static void Mixer_Begin(const Mixer* const mixer)
+static void Mixer_Begin(Mixer_State* const state)
 {
-	Mixer_State* const state = mixer->state;
-
 	Mixer_Source_NewFrame(&state->fm);
 	Mixer_Source_NewFrame(&state->psg);
 	Mixer_Source_NewFrame(&state->pcm);
 	Mixer_Source_NewFrame(&state->cdda);
 }
 
-static cc_s16l* Mixer_AllocateFMSamples(const Mixer* const mixer, const size_t total_frames)
+static cc_s16l* Mixer_AllocateFMSamples(Mixer_State* const state, const size_t total_frames)
 {
-	return Mixer_Source_AllocateFrames(&mixer->state->fm, total_frames);
+	return Mixer_Source_AllocateFrames(&state->fm, total_frames);
 }
 
-static cc_s16l* Mixer_AllocatePSGSamples(const Mixer* const mixer, const size_t total_frames)
+static cc_s16l* Mixer_AllocatePSGSamples(Mixer_State* const state, const size_t total_frames)
 {
-	return Mixer_Source_AllocateFrames(&mixer->state->psg, total_frames);
+	return Mixer_Source_AllocateFrames(&state->psg, total_frames);
 }
 
-static cc_s16l* Mixer_AllocatePCMSamples(const Mixer* const mixer, const size_t total_frames)
+static cc_s16l* Mixer_AllocatePCMSamples(Mixer_State* const state, const size_t total_frames)
 {
-	return Mixer_Source_AllocateFrames(&mixer->state->pcm, total_frames);
+	return Mixer_Source_AllocateFrames(&state->pcm, total_frames);
 }
 
-static cc_s16l* Mixer_AllocateCDDASamples(const Mixer* const mixer, const size_t total_frames)
+static cc_s16l* Mixer_AllocateCDDASamples(Mixer_State* const state, const size_t total_frames)
 {
-	return Mixer_Source_AllocateFrames(&mixer->state->cdda, total_frames);
+	return Mixer_Source_AllocateFrames(&state->cdda, total_frames);
 }
 
-static void Mixer_End(const Mixer* const mixer, void (* const callback)(void *user_data, const MIXER_FORMAT *audio_samples, size_t total_frames), const void* const user_data)
+static void Mixer_End(Mixer_State* const state, void (* const callback)(void *user_data, const MIXER_FORMAT *audio_samples, size_t total_frames), const void* const user_data)
 {
-	Mixer_State* const state = mixer->state;
 	const size_t available_fm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->fm);
 	const size_t available_psg_frames = Mixer_Source_GetTotalAllocatedFrames(&state->psg);
 	const size_t available_pcm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->pcm);
