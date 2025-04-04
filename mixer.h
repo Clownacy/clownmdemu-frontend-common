@@ -142,11 +142,6 @@ static cc_u32f GetCorrectedSampleRate(const cc_u32f sample_rate_ntsc, const cc_u
 		: CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(sample_rate_ntsc));
 }
 
-static cc_u32f DivideByFramerate(const cc_bool pal_mode, const cc_u32f value)
-{
-	return pal_mode ? CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(value) : CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(value);
-}
-
 static cc_bool Mixer_Initialise(Mixer_State* const state, const cc_bool pal_mode)
 {
 	const cc_u32f fm_sample_rate = GetCorrectedSampleRate(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC, CLOWNMDEMU_FM_SAMPLE_RATE_PAL, pal_mode);
