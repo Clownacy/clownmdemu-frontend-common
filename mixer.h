@@ -332,6 +332,11 @@ static cc_u32f GetCorrectedSampleRate(const cc_u32f sample_rate_ntsc, const cc_u
 		: CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(sample_rate_ntsc));
 }
 
+static cc_u32f DivideByFramerate(const cc_bool pal_mode, const cc_u32f value)
+{
+	return pal_mode ? CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(value) : CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(value);
+}
+
 static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_u32f output_sample_rate, const cc_bool pal_mode)
 {
 	const cc_u32f fm_sample_rate = GetCorrectedSampleRate(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC, CLOWNMDEMU_FM_SAMPLE_RATE_PAL, pal_mode);
@@ -346,7 +351,7 @@ static cc_bool Mixer_State_Initialise(Mixer_State* const state, const cc_u32f ou
 
 	if (fm_success && psg_success && pcm_success && cdda_success)
 	{
-		state->output_length = pal_mode ? CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(output_sample_rate) : CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(output_sample_rate);
+		state->output_length = DivideByFramerate(pal_mode, output_sample_rate);
 
 		return cc_true;
 	}
@@ -373,10 +378,12 @@ static void Mixer_State_Deinitialise(Mixer_State* const state)
 
 static void Mixer_Begin(const Mixer* const mixer)
 {
-	Mixer_Source_NewFrame(&mixer->state->fm);
-	Mixer_Source_NewFrame(&mixer->state->psg);
-	Mixer_Source_NewFrame(&mixer->state->pcm);
-	Mixer_Source_NewFrame(&mixer->state->cdda);
+	Mixer_State* const state = mixer->state;
+
+	Mixer_Source_NewFrame(&state->fm);
+	Mixer_Source_NewFrame(&state->psg);
+	Mixer_Source_NewFrame(&state->pcm);
+	Mixer_Source_NewFrame(&state->cdda);
 }
 
 static cc_s16l* Mixer_AllocateFMSamples(const Mixer* const mixer, const size_t total_frames)
@@ -401,11 +408,12 @@ static cc_s16l* Mixer_AllocateCDDASamples(const Mixer* const mixer, const size_t
 
 static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const cc_u32f denominator, void (* const callback)(void *user_data, const MIXER_FORMAT *audio_samples, size_t total_frames), const void* const user_data)
 {
-	const cc_u32f adjusted_output_length = Mixer_MulDiv(mixer->state->output_length, denominator, numerator);
-	const size_t available_fm_frames = Mixer_Source_GetTotalAllocatedFrames(&mixer->state->fm);
-	const size_t available_psg_frames = Mixer_Source_GetTotalAllocatedFrames(&mixer->state->psg);
-	const size_t available_pcm_frames = Mixer_Source_GetTotalAllocatedFrames(&mixer->state->pcm);
-	const size_t available_cdda_frames = Mixer_Source_GetTotalAllocatedFrames(&mixer->state->cdda);
+	Mixer_State* const state = mixer->state;
+	const cc_u32f adjusted_output_length = Mixer_MulDiv(state->output_length, denominator, numerator);
+	const size_t available_fm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->fm);
+	const size_t available_psg_frames = Mixer_Source_GetTotalAllocatedFrames(&state->psg);
+	const size_t available_pcm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->pcm);
+	const size_t available_cdda_frames = Mixer_Source_GetTotalAllocatedFrames(&state->cdda);
 	const cc_u32f fm_ratio = CLOWNRESAMPLER_TO_FIXED_POINT_FROM_INTEGER(available_fm_frames) / adjusted_output_length;
 	const cc_u32f psg_ratio = CLOWNRESAMPLER_TO_FIXED_POINT_FROM_INTEGER(available_psg_frames) / adjusted_output_length;
 	const cc_u32f pcm_ratio = CLOWNRESAMPLER_TO_FIXED_POINT_FROM_INTEGER(available_pcm_frames) / adjusted_output_length;
@@ -417,10 +425,10 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 	cc_u32f i;
 
 #if 0 /* This isn't necessary, right? */
-	ClownResampler_LowestLevel_Configure(&mixer->state->fm_resampler, Mixer_MulDiv(mixer->state->fm_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->output_sample_rate);
-	ClownResampler_LowestLevel_Configure(&mixer->state->psg_resampler, Mixer_MulDiv(mixer->state->psg_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->output_sample_rate);
-	ClownResampler_LowestLevel_Configure(&mixer->state->pcm_resampler, Mixer_MulDiv(mixer->state->pcm_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->output_sample_rate);
-	ClownResampler_LowestLevel_Configure(&mixer->state->cdda_resampler, Mixer_MulDiv(mixer->state->cdda_sample_rate, numerator, denominator), mixer->state->output_sample_rate, mixer->state->output_sample_rate);
+	ClownResampler_LowestLevel_Configure(&state->fm_resampler, Mixer_MulDiv(state->fm_sample_rate, numerator, denominator), state->output_sample_rate, state->output_sample_rate);
+	ClownResampler_LowestLevel_Configure(&state->psg_resampler, Mixer_MulDiv(state->psg_sample_rate, numerator, denominator), state->output_sample_rate, state->output_sample_rate);
+	ClownResampler_LowestLevel_Configure(&state->pcm_resampler, Mixer_MulDiv(state->pcm_sample_rate, numerator, denominator), state->output_sample_rate, state->output_sample_rate);
+	ClownResampler_LowestLevel_Configure(&state->cdda_resampler, Mixer_MulDiv(state->cdda_sample_rate, numerator, denominator), state->output_sample_rate, state->output_sample_rate);
 #endif
 
 	/* Resample, mix, and output the audio for this frame. */
@@ -431,10 +439,10 @@ static void Mixer_End(const Mixer* const mixer, const cc_u32f numerator, const c
 		cc_s32f pcm_frame[CLOWNMDEMU_PCM_CHANNEL_COUNT];
 		cc_s32f cdda_frame[CLOWNMDEMU_CDDA_CHANNEL_COUNT];
 
-		Mixer_Source_GetFrame(&mixer->state->fm, &mixer->constant->resampler_precomputed, fm_frame, fm_position);
-		Mixer_Source_GetFrame(&mixer->state->psg, &mixer->constant->resampler_precomputed, psg_frame, psg_position);
-		Mixer_Source_GetFrame(&mixer->state->pcm, &mixer->constant->resampler_precomputed, pcm_frame, pcm_position);
-		Mixer_Source_GetFrame(&mixer->state->cdda, &mixer->constant->resampler_precomputed, cdda_frame, cdda_position);
+		Mixer_Source_GetFrame(&state->fm, &mixer->constant->resampler_precomputed, fm_frame, fm_position);
+		Mixer_Source_GetFrame(&state->psg, &mixer->constant->resampler_precomputed, psg_frame, psg_position);
+		Mixer_Source_GetFrame(&state->pcm, &mixer->constant->resampler_precomputed, pcm_frame, pcm_position);
+		Mixer_Source_GetFrame(&state->cdda, &mixer->constant->resampler_precomputed, cdda_frame, cdda_position);
 
 		/* Mix the FM, PSG, PCM, and CDDA to produce the final audio. */
 		(*output_buffer_pointer)[0] = fm_frame[0] / (1 << 1) + psg_frame[0] / (1 << 4) + pcm_frame[0] / (1 << 3) + cdda_frame[0] / (1 << 3);
