@@ -132,7 +132,7 @@ static void Mixer_Source_GetFrame(Mixer_Source* const source, cc_s32f* const fra
 
 /* Mixer API */
 
-static cc_u32f GetCorrectedSampleRate(const cc_u32f sample_rate_ntsc, const cc_u32f sample_rate_pal, const cc_bool pal_mode)
+static cc_u32f Mixer_GetCorrectedSampleRate(const cc_u32f sample_rate_ntsc, const cc_u32f sample_rate_pal, const cc_bool pal_mode)
 {
 	return pal_mode
 		? CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(sample_rate_pal))
@@ -141,10 +141,10 @@ static cc_u32f GetCorrectedSampleRate(const cc_u32f sample_rate_ntsc, const cc_u
 
 static cc_bool Mixer_Initialise(Mixer_State* const state, const cc_bool pal_mode)
 {
-	const cc_u32f fm_sample_rate = GetCorrectedSampleRate(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC, CLOWNMDEMU_FM_SAMPLE_RATE_PAL, pal_mode);
-	const cc_u32f psg_sample_rate = GetCorrectedSampleRate(CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC, CLOWNMDEMU_PSG_SAMPLE_RATE_PAL, pal_mode);
-	const cc_u32f pcm_sample_rate = GetCorrectedSampleRate(CLOWNMDEMU_PCM_SAMPLE_RATE, CLOWNMDEMU_PCM_SAMPLE_RATE, pal_mode);
-	const cc_u32f cdda_sample_rate = GetCorrectedSampleRate(CLOWNMDEMU_CDDA_SAMPLE_RATE, CLOWNMDEMU_CDDA_SAMPLE_RATE, pal_mode);
+	const cc_u32f fm_sample_rate = Mixer_GetCorrectedSampleRate(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC, CLOWNMDEMU_FM_SAMPLE_RATE_PAL, pal_mode);
+	const cc_u32f psg_sample_rate = Mixer_GetCorrectedSampleRate(CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC, CLOWNMDEMU_PSG_SAMPLE_RATE_PAL, pal_mode);
+	const cc_u32f pcm_sample_rate = Mixer_GetCorrectedSampleRate(CLOWNMDEMU_PCM_SAMPLE_RATE, CLOWNMDEMU_PCM_SAMPLE_RATE, pal_mode);
+	const cc_u32f cdda_sample_rate = Mixer_GetCorrectedSampleRate(CLOWNMDEMU_CDDA_SAMPLE_RATE, CLOWNMDEMU_CDDA_SAMPLE_RATE, pal_mode);
 
 	const cc_bool fm_success = Mixer_Source_Initialise(&state->fm, CLOWNMDEMU_FM_CHANNEL_COUNT, fm_sample_rate);
 	const cc_bool psg_success = Mixer_Source_Initialise(&state->psg, CLOWNMDEMU_PSG_CHANNEL_COUNT, psg_sample_rate);
