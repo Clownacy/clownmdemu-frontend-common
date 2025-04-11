@@ -110,7 +110,7 @@ static size_t Mixer_Source_GetTotalAllocatedFrames(const Mixer_Source* const sou
 	return source->write_index;
 }
 
-static void Mixer_Source_GetFrame(Mixer_Source* const source, cc_s32f* const frame, const cc_u32f position)
+static void Mixer_Source_GetFrame(Mixer_Source* const source, cc_s16f* const frame, const cc_u32f position)
 {
 	const cc_u8f total_channels = source->channels;
 	const cc_u32f position_integral = position / MIXER_FIXED_POINT_FRACTIONAL_SIZE;
@@ -222,9 +222,9 @@ static void Mixer_End(Mixer_State* const state, void (* const callback)(void *us
 	/* Resample, mix, and output the audio for this frame. */
 	for (i = 0, fm_position = 0, pcm_position = 0, cdda_position = 0; i < output_length; ++i, fm_position += fm_ratio, pcm_position += pcm_ratio, cdda_position += cdda_ratio)
 	{
-		cc_s32f fm_frame[CLOWNMDEMU_FM_CHANNEL_COUNT];
-		cc_s32f pcm_frame[CLOWNMDEMU_PCM_CHANNEL_COUNT];
-		cc_s32f cdda_frame[CLOWNMDEMU_CDDA_CHANNEL_COUNT];
+		cc_s16f fm_frame[CLOWNMDEMU_FM_CHANNEL_COUNT];
+		cc_s16f pcm_frame[CLOWNMDEMU_PCM_CHANNEL_COUNT];
+		cc_s16f cdda_frame[CLOWNMDEMU_CDDA_CHANNEL_COUNT];
 
 		Mixer_Source_GetFrame(&state->fm, fm_frame, fm_position);
 		Mixer_Source_GetFrame(&state->pcm, pcm_frame, pcm_position);
