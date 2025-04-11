@@ -121,12 +121,10 @@ static void Mixer_Source_GetFrame(Mixer_Source* const source, cc_s32f* const fra
 
 	for (i = 0; i < total_channels; ++i)
 	{
-		/* Perform linear interpolation. */
 		const cc_u32f sample_position = frame_position + i;
 		const cc_s16f sample_base = source->buffer[sample_position];
-		const cc_s16f sample_delta = source->buffer[sample_position + total_channels] - sample_base;
 
-		frame[i] = sample_base + MIXER_FIXED_POINT_MULTIPLY(sample_delta, position_fractional);
+		frame[i] = sample_base;
 	}
 }
 
