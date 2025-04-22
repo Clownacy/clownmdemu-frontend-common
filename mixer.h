@@ -114,7 +114,6 @@ static void Mixer_Source_GetFrame(Mixer_Source* const source, cc_s16f* const fra
 {
 	const cc_u8f total_channels = source->channels;
 	const cc_u32f position_integral = position / MIXER_FIXED_POINT_FRACTIONAL_SIZE;
-	const cc_s32f position_fractional = position % MIXER_FIXED_POINT_FRACTIONAL_SIZE;
 	const cc_u32f frame_position = position_integral * total_channels;
 
 	cc_u8f i;
