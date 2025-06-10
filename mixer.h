@@ -41,6 +41,7 @@ void Mixer_End(Mixer_State *state, Mixer_Callback callback, const void *user_dat
 
 #ifdef __cplusplus
 
+#include <cassert>
 #include <cstddef>
 #if __cplusplus >= 201103L
 #include <functional>
@@ -59,39 +60,55 @@ public:
 	{
 		initialised = Mixer_Initialise(&state, pal_mode);
 	}
+	Mixer(const Mixer &other) = delete;
+	Mixer(Mixer &&other) = delete;
+	Mixer& operator=(const Mixer &other) = delete;
+	Mixer& operator=(Mixer &&other) = delete;
 
 	~Mixer()
 	{
+		assert(initialised);
 		Mixer_Deinitialise(&state);
+	}
+
+	bool Initialised() const
+	{
+		return initialised;
 	}
 
 	void Begin()
 	{
+		assert(Initialised());
 		Mixer_Begin(&state);
 	}
 
 	cc_s16l* AllocateFMSamples(const std::size_t total_frames)
 	{
+		assert(Initialised());
 		return Mixer_AllocateFMSamples(&state, total_frames);
 	}
 
 	cc_s16l* AllocatePSGSamples(const std::size_t total_frames)
 	{
+		assert(Initialised());
 		return Mixer_AllocatePSGSamples(&state, total_frames);
 	}
 
 	cc_s16l* AllocatePCMSamples(const std::size_t total_frames)
 	{
+		assert(Initialised());
 		return Mixer_AllocatePCMSamples(&state, total_frames);
 	}
 
 	cc_s16l* AllocateCDDASamples(const std::size_t total_frames)
 	{
+		assert(Initialised());
 		return Mixer_AllocateCDDASamples(&state, total_frames);
 	}
 
 	void End(const Callback callback, const void* const user_data)
 	{
+		assert(Initialised());
 		Mixer_End(&state, callback, user_data);
 	}
 
@@ -108,6 +125,13 @@ public:
 		);
 	}
 #endif
+
+	void SetPALMode(const bool enabled)
+	{
+		assert(Initialised());
+		Mixer_Deinitialise(&state);
+		initialised = Mixer_Initialise(&state, enabled);
+	}
 };
 
 #endif
