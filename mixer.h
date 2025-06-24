@@ -41,9 +41,16 @@ void Mixer_End(Mixer_State *state, Mixer_Callback callback, const void *user_dat
 
 #ifdef __cplusplus
 
+// MSVC is FUCKING SHIT, setting '__cplusplus' to the wrong value in a direct violation of the C++ standard.
+#ifdef _MSVC_LANG
+#define MIXER_CPLUSPLUS _MSVC_LANG
+#else
+#define MIXER_CPLUSPLUS __cplusplus
+#endif
+
 #include <cassert>
 #include <cstddef>
-#if __cplusplus >= 201103L
+#if MIXER_CPLUSPLUS >= 201103L
 #include <functional>
 #endif
 
@@ -112,7 +119,7 @@ public:
 		Mixer_End(&state, callback, user_data);
 	}
 
-#if __cplusplus >= 201103L
+#if MIXER_CPLUSPLUS >= 201103L
 	using CallbackFunctional = std::function<void(const cc_s16l *audio_samples, std::size_t total_frames)>;
 	void End(const CallbackFunctional &callback)
 	{
