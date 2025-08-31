@@ -6,6 +6,8 @@
 #ifndef MIXER_HEADER
 #define MIXER_HEADER
 
+#include "clownresampler/clownresampler.h"
+
 #define MIXER_OUTPUT_SAMPLE_RATE CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC
 #define MIXER_DIVIDE_BY_LOWEST_FRAMERATE CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE
 #define MIXER_MAXIMUM_AUDIO_FRAMES_PER_FRAME MIXER_DIVIDE_BY_LOWEST_FRAMERATE(MIXER_OUTPUT_SAMPLE_RATE)
@@ -21,6 +23,7 @@ typedef struct Mixer_Source
 	cc_s16l *buffer;
 	size_t capacity;
 	size_t write_index;
+	ClownResampler_LowestLevel_Configuration resampler;
 } Mixer_Source;
 
 typedef struct Mixer_State
@@ -174,12 +177,16 @@ public:
 
 /* Mixer Source */
 
+static ClownResampler_Precomputed resampler_precomputed;
+
 static cc_bool Mixer_Source_Initialise(Mixer_Source* const source, const cc_u8f channels, const cc_u32f input_sample_rate)
 {
+	ClownResampler_LowestLevel_Configure(&source->resampler, input_sample_rate, MIXER_OUTPUT_SAMPLE_RATE, MIXER_OUTPUT_SAMPLE_RATE);
+
 	source->channels = channels;
 	/* The '+1' is just a lazy way of performing a rough ceiling division. */
 	source->capacity = 1 + MIXER_DIVIDE_BY_LOWEST_FRAMERATE(input_sample_rate);
-	source->buffer = (cc_s16l*)MIXER_CALLOC(1, (1 + source->capacity) * source->channels * sizeof(cc_s16l));
+	source->buffer = (cc_s16l*)MIXER_CALLOC(1, (source->resampler.integer_stretched_kernel_radius * 2 + source->capacity) * source->channels * sizeof(cc_s16l));
 	source->write_index = 0;
 
 	return source->buffer != NULL;
@@ -197,21 +204,23 @@ static cc_s16l* Mixer_Source_Buffer(Mixer_Source* const source, const size_t ind
 
 static void Mixer_Source_NewFrame(Mixer_Source* const source)
 {
+	const size_t integer_stretched_kernel_diameter = source->resampler.integer_stretched_kernel_radius * 2;
+
 	/* To make the resampler happy, we need to maintain some padding frames. */
 	/* See clownresampler's documentation for more information. */
 
 	/* Copy the end of each buffer to its beginning, since we never used all of it. */
-	MIXER_MEMMOVE(source->buffer, Mixer_Source_Buffer(source, source->write_index), 1 * source->channels * sizeof(cc_s16l));
+	MIXER_MEMMOVE(source->buffer, Mixer_Source_Buffer(source, source->write_index), integer_stretched_kernel_diameter * source->channels * sizeof(cc_s16l));
 
 	/* Blank the remainder of the buffers so that they can be mixed into. */
-	MIXER_MEMSET(Mixer_Source_Buffer(source, 1), 0, source->write_index * source->channels * sizeof(cc_s16l));
+	MIXER_MEMSET(Mixer_Source_Buffer(source, integer_stretched_kernel_diameter), 0, source->write_index * source->channels * sizeof(cc_s16l));
 
 	source->write_index = 0;
 }
 
 static cc_s16l* Mixer_Source_AllocateFrames(Mixer_Source* const source, const size_t total_frames)
 {
-	cc_s16l* const allocated_samples = Mixer_Source_Buffer(source, 1 + source->write_index);
+	cc_s16l* const allocated_samples = Mixer_Source_Buffer(source, source->resampler.integer_stretched_kernel_radius * 2 + source->write_index);
 
 	source->write_index += total_frames;
 
@@ -225,24 +234,19 @@ static size_t Mixer_Source_GetTotalAllocatedFrames(const Mixer_Source* const sou
 	return source->write_index;
 }
 
-static void Mixer_Source_GetFrame(Mixer_Source* const source, cc_s16f* const frame, const cc_u32f position)
+static void Mixer_Source_GetFrame(Mixer_Source* const source, cc_s32f* const frame, const cc_u32f position)
 {
-	const cc_u8f total_channels = source->channels;
-	const cc_u32f position_integral = position / MIXER_FIXED_POINT_FRACTIONAL_SIZE;
-	const cc_u32f frame_position = position_integral * total_channels;
-
-	cc_u8f i;
-
-	for (i = 0; i < total_channels; ++i)
-	{
-		const cc_u32f sample_position = frame_position + i;
-		const cc_s16f sample_base = source->buffer[sample_position];
-
-		frame[i] = sample_base;
-	}
+	MIXER_MEMSET(frame, 0, source->channels * sizeof(*frame));
+	ClownResampler_LowestLevel_Resample(&source->resampler, &resampler_precomputed, frame, source->channels, source->buffer, CLOWNRESAMPLER_TO_INTEGER_FROM_FIXED_POINT_FLOOR(position), position % CLOWNRESAMPLER_FIXED_POINT_FRACTIONAL_SIZE);
 }
 
 /* Mixer API */
+
+static void Mixer_Constant_Initialise(void)
+{
+	/* Compute clownresampler's lookup tables.*/
+	ClownResampler_Precompute(&resampler_precomputed);
+}
 
 static cc_u32f Mixer_GetCorrectedSampleRate(const cc_u32f sample_rate_ntsc, const cc_u32f sample_rate_pal, const cc_bool pal_mode)
 {
@@ -262,6 +266,9 @@ cc_bool Mixer_Initialise(Mixer_State* const state, const cc_bool pal_mode)
 	const cc_bool psg_success = Mixer_Source_Initialise(&state->psg, CLOWNMDEMU_PSG_CHANNEL_COUNT, psg_sample_rate);
 	const cc_bool pcm_success = Mixer_Source_Initialise(&state->pcm, CLOWNMDEMU_PCM_CHANNEL_COUNT, pcm_sample_rate);
 	const cc_bool cdda_success = Mixer_Source_Initialise(&state->cdda, CLOWNMDEMU_CDDA_CHANNEL_COUNT, cdda_sample_rate);
+
+	/* TODO: Remove this. */
+	Mixer_Constant_Initialise();
 
 	if (fm_success && psg_success && pcm_success && cdda_success)
 		return cc_true;
@@ -336,9 +343,9 @@ void Mixer_End(Mixer_State* const state, const Mixer_Callback callback, const vo
 	/* Resample, mix, and output the audio for this frame. */
 	for (i = 0, fm_position = 0, pcm_position = 0, cdda_position = 0; i < output_length; ++i, fm_position += fm_ratio, pcm_position += pcm_ratio, cdda_position += cdda_ratio)
 	{
-		cc_s16f fm_frame[CLOWNMDEMU_FM_CHANNEL_COUNT];
-		cc_s16f pcm_frame[CLOWNMDEMU_PCM_CHANNEL_COUNT];
-		cc_s16f cdda_frame[CLOWNMDEMU_CDDA_CHANNEL_COUNT];
+		cc_s32f fm_frame[CLOWNMDEMU_FM_CHANNEL_COUNT];
+		cc_s32f pcm_frame[CLOWNMDEMU_PCM_CHANNEL_COUNT];
+		cc_s32f cdda_frame[CLOWNMDEMU_CDDA_CHANNEL_COUNT];
 
 		Mixer_Source_GetFrame(&state->fm, fm_frame, fm_position);
 		Mixer_Source_GetFrame(&state->pcm, pcm_frame, pcm_position);
