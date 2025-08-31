@@ -251,45 +251,52 @@ static cc_u32f Mixer_GetCorrectedSampleRate(const cc_u32f sample_rate_ntsc, cons
 
 cc_bool Mixer_Initialise(Mixer_State* const state, const cc_bool pal_mode)
 {
-	const cc_u32f fm_sample_rate = Mixer_GetCorrectedSampleRate(CLOWNMDEMU_FM_SAMPLE_RATE_NTSC, CLOWNMDEMU_FM_SAMPLE_RATE_PAL, pal_mode);
-	const cc_u32f psg_sample_rate = Mixer_GetCorrectedSampleRate(CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC, CLOWNMDEMU_PSG_SAMPLE_RATE_PAL, pal_mode);
-	const cc_u32f pcm_sample_rate = Mixer_GetCorrectedSampleRate(CLOWNMDEMU_PCM_SAMPLE_RATE, CLOWNMDEMU_PCM_SAMPLE_RATE, pal_mode);
-	const cc_u32f cdda_sample_rate = Mixer_GetCorrectedSampleRate(CLOWNMDEMU_CDDA_SAMPLE_RATE, CLOWNMDEMU_CDDA_SAMPLE_RATE, pal_mode);
+	static const struct
+	{
+		cc_u32l sample_rate_ntsc, sample_rate_pal;
+		cc_u8l channel_count;
+	} metadata[MIXER_SOURCE_TOTAL] = {
+		{CLOWNMDEMU_FM_SAMPLE_RATE_NTSC,  CLOWNMDEMU_FM_SAMPLE_RATE_PAL,  CLOWNMDEMU_FM_CHANNEL_COUNT  }, /* MIXER_SOURCE_FM   */
+		{CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC, CLOWNMDEMU_PSG_SAMPLE_RATE_PAL, CLOWNMDEMU_PSG_CHANNEL_COUNT }, /* MIXER_SOURCE_PSG  */
+		{CLOWNMDEMU_PCM_SAMPLE_RATE,      CLOWNMDEMU_PCM_SAMPLE_RATE,     CLOWNMDEMU_PCM_CHANNEL_COUNT }, /* MIXER_SOURCE_PCM  */
+		{CLOWNMDEMU_CDDA_SAMPLE_RATE,     CLOWNMDEMU_CDDA_SAMPLE_RATE,    CLOWNMDEMU_CDDA_CHANNEL_COUNT}, /* MIXER_SOURCE_CDDA */
+	};
 
-	const cc_bool fm_success = Mixer_Source_Initialise(&state->sources[MIXER_SOURCE_FM], CLOWNMDEMU_FM_CHANNEL_COUNT, fm_sample_rate);
-	const cc_bool psg_success = Mixer_Source_Initialise(&state->sources[MIXER_SOURCE_PSG], CLOWNMDEMU_PSG_CHANNEL_COUNT, psg_sample_rate);
-	const cc_bool pcm_success = Mixer_Source_Initialise(&state->sources[MIXER_SOURCE_PCM], CLOWNMDEMU_PCM_CHANNEL_COUNT, pcm_sample_rate);
-	const cc_bool cdda_success = Mixer_Source_Initialise(&state->sources[MIXER_SOURCE_CDDA], CLOWNMDEMU_CDDA_CHANNEL_COUNT, cdda_sample_rate);
+	cc_bool successes[MIXER_SOURCE_TOTAL], success = cc_true;
+	cc_u8f i;
 
-	if (fm_success && psg_success && pcm_success && cdda_success)
+	for (i = 0; i < CC_COUNT_OF(state->sources); ++i)
+	{
+		const cc_u32f sample_rate = Mixer_GetCorrectedSampleRate(metadata[i].sample_rate_ntsc, metadata[i].sample_rate_pal, pal_mode);
+		successes[i] = Mixer_Source_Initialise(&state->sources[i], metadata[i].channel_count, sample_rate);
+
+		success = success && successes[i];
+	}
+
+	if (success)
 		return cc_true;
 
-	if (fm_success)
-		Mixer_Source_Deinitialise(&state->sources[MIXER_SOURCE_FM]);
-	if (psg_success)
-		Mixer_Source_Deinitialise(&state->sources[MIXER_SOURCE_PSG]);
-	if (pcm_success)
-		Mixer_Source_Deinitialise(&state->sources[MIXER_SOURCE_PCM]);
-	if (cdda_success)
-		Mixer_Source_Deinitialise(&state->sources[MIXER_SOURCE_CDDA]);
+	for (i = 0; i < CC_COUNT_OF(state->sources); ++i)
+		if (successes[i])
+			Mixer_Source_Deinitialise(&state->sources[i]);
 
 	return cc_false;
 }
 
 void Mixer_Deinitialise(Mixer_State* const state)
 {
-	Mixer_Source_Deinitialise(&state->sources[MIXER_SOURCE_FM]);
-	Mixer_Source_Deinitialise(&state->sources[MIXER_SOURCE_PSG]);
-	Mixer_Source_Deinitialise(&state->sources[MIXER_SOURCE_PCM]);
-	Mixer_Source_Deinitialise(&state->sources[MIXER_SOURCE_CDDA]);
+	cc_u8f i;
+
+	for (i = 0; i < CC_COUNT_OF(state->sources); ++i)
+		Mixer_Source_Deinitialise(&state->sources[i]);
 }
 
 void Mixer_Begin(Mixer_State* const state)
 {
-	Mixer_Source_NewFrame(&state->sources[MIXER_SOURCE_FM]);
-	Mixer_Source_NewFrame(&state->sources[MIXER_SOURCE_PSG]);
-	Mixer_Source_NewFrame(&state->sources[MIXER_SOURCE_PCM]);
-	Mixer_Source_NewFrame(&state->sources[MIXER_SOURCE_CDDA]);
+	cc_u8f i;
+
+	for (i = 0; i < CC_COUNT_OF(state->sources); ++i)
+		Mixer_Source_NewFrame(&state->sources[i]);
 }
 
 cc_s16l* Mixer_AllocateFMSamples(Mixer_State* const state, const size_t total_frames)
@@ -314,16 +321,16 @@ cc_s16l* Mixer_AllocateCDDASamples(Mixer_State* const state, const size_t total_
 
 void Mixer_End(Mixer_State* const state, const Mixer_Callback callback, const void* const user_data)
 {
-	const size_t available_fm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->sources[MIXER_SOURCE_FM]);
-	const size_t available_psg_frames = Mixer_Source_GetTotalAllocatedFrames(&state->sources[MIXER_SOURCE_PSG]);
-	const size_t available_pcm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->sources[MIXER_SOURCE_PCM]);
+	const size_t available_fm_frames   = Mixer_Source_GetTotalAllocatedFrames(&state->sources[MIXER_SOURCE_FM]);
+	const size_t available_psg_frames  = Mixer_Source_GetTotalAllocatedFrames(&state->sources[MIXER_SOURCE_PSG]);
+	const size_t available_pcm_frames  = Mixer_Source_GetTotalAllocatedFrames(&state->sources[MIXER_SOURCE_PCM]);
 	const size_t available_cdda_frames = Mixer_Source_GetTotalAllocatedFrames(&state->sources[MIXER_SOURCE_CDDA]);
 
 	/* By orienting everything around the PSG, we avoid the need to resample the PSG! */
 	const cc_u32f output_length = available_psg_frames;
 
-	const cc_u32f fm_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_fm_frames) / output_length;
-	const cc_u32f pcm_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_pcm_frames) / output_length;
+	const cc_u32f fm_ratio   = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_fm_frames) / output_length;
+	const cc_u32f pcm_ratio  = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_pcm_frames) / output_length;
 	const cc_u32f cdda_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_cdda_frames) / output_length;
 
 	cc_s16l output_buffer[MIXER_MAXIMUM_AUDIO_FRAMES_PER_FRAME * MIXER_CHANNEL_COUNT];
