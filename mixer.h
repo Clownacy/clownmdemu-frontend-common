@@ -344,27 +344,29 @@ void Mixer_End(Mixer_State* const state, const Mixer_Callback callback, const vo
 	/* Resample, mix, and output the audio for this frame. */
 	for (frame_index = 0; frame_index < available_frames[MIXER_SOURCE_TOTAL - 1]; ++frame_index)
 	{
-		const cc_s16l psg_sample = state->sources[MIXER_SOURCE_PSG].buffer[frame_index * CLOWNMDEMU_PSG_CHANNEL_COUNT] / CLOWNMDEMU_PSG_VOLUME_DIVISOR;
-
-		const cc_s16l *frame[MIXER_SOURCE_TOTAL - 1];
-
-		for (i = 0; i < CC_COUNT_OF(frame); ++i)
-			frame[i] = Mixer_Source_GetFrame(&state->sources[i], position[i]);
+		/* We use a macro instead of a loop so that the division is optimised to a bit-shift. */
+		/* Beware: This code assumes that the sources are stereo! */
+#define MIXER_DO_SOURCE(SOURCE, VOLUME_DIVISOR) \
+		{ \
+			const cc_s16l* const frame = Mixer_Source_GetFrame(&state->sources[SOURCE], position[SOURCE]); \
+\
+			for (i = 0; i < MIXER_CHANNEL_COUNT; ++i) \
+				output_buffer_pointer[i] += frame[i] / (VOLUME_DIVISOR); \
+\
+			position[SOURCE] += ratio[SOURCE]; \
+		}
 
 		/* Mix the FM, PSG, PCM, and CDDA to produce the final audio. */
-		*output_buffer_pointer = psg_sample +
-			frame[MIXER_SOURCE_FM][0] / CLOWNMDEMU_FM_VOLUME_DIVISOR +
-			frame[MIXER_SOURCE_PCM][0] / CLOWNMDEMU_PCM_VOLUME_DIVISOR +
-			frame[MIXER_SOURCE_CDDA][0] / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
-		++output_buffer_pointer;
-		*output_buffer_pointer = psg_sample +
-			frame[MIXER_SOURCE_FM][1] / CLOWNMDEMU_FM_VOLUME_DIVISOR +
-			frame[MIXER_SOURCE_PCM][1] / CLOWNMDEMU_PCM_VOLUME_DIVISOR +
-			frame[MIXER_SOURCE_CDDA][1] / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
-		++output_buffer_pointer;
+		const cc_s16l psg_sample = state->sources[MIXER_SOURCE_PSG].buffer[frame_index * CLOWNMDEMU_PSG_CHANNEL_COUNT] / CLOWNMDEMU_PSG_VOLUME_DIVISOR;
 
-		for (i = 0; i < CC_COUNT_OF(position); ++i)
-			position[i] += ratio[i];
+		for (i = 0; i < MIXER_CHANNEL_COUNT; ++i)
+			output_buffer_pointer[i] = psg_sample;
+
+		MIXER_DO_SOURCE(MIXER_SOURCE_FM,   CLOWNMDEMU_FM_VOLUME_DIVISOR  );
+		MIXER_DO_SOURCE(MIXER_SOURCE_PCM,  CLOWNMDEMU_PCM_VOLUME_DIVISOR );
+		MIXER_DO_SOURCE(MIXER_SOURCE_CDDA, CLOWNMDEMU_CDDA_VOLUME_DIVISOR);
+
+		output_buffer_pointer += MIXER_CHANNEL_COUNT;
 	}
 
 	/* Output resampled and mixed samples. */
