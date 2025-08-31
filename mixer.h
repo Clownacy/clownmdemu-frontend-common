@@ -8,9 +8,8 @@
 
 #include "clownresampler/clownresampler.h"
 
-#define MIXER_OUTPUT_SAMPLE_RATE CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC
+#define MIXER_OUTPUT_SAMPLE_RATE CLOWNMDEMU_CDDA_SAMPLE_RATE
 #define MIXER_DIVIDE_BY_LOWEST_FRAMERATE CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE
-#define MIXER_MAXIMUM_AUDIO_FRAMES_PER_FRAME MIXER_DIVIDE_BY_LOWEST_FRAMERATE(MIXER_OUTPUT_SAMPLE_RATE)
 #define MIXER_CHANNEL_COUNT CC_MAX(CC_MAX(CC_MAX(CLOWNMDEMU_FM_CHANNEL_COUNT, CLOWNMDEMU_PSG_CHANNEL_COUNT), CLOWNMDEMU_PCM_CHANNEL_COUNT), CLOWNMDEMU_CDDA_CHANNEL_COUNT)
 
 #define MIXER_FIXED_POINT_FRACTIONAL_SIZE (1 << 16)
@@ -328,33 +327,33 @@ void Mixer_End(Mixer_State* const state, const Mixer_Callback callback, const vo
 	const size_t available_pcm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->pcm);
 	const size_t available_cdda_frames = Mixer_Source_GetTotalAllocatedFrames(&state->cdda);
 
-	/* By orienting everything around the PSG, we avoid the need to resample the PSG! */
-	const cc_u32f output_length = available_psg_frames;
+	/* By orienting everything around the CDDA, we avoid the need to resample the CDDA! */
+	cc_s16l* const output_buffer = state->cdda.buffer;
+	const cc_u32f output_length = available_cdda_frames;
 
 	const cc_u32f fm_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_fm_frames) / output_length;
+	const cc_u32f psg_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_psg_frames) / output_length;
 	const cc_u32f pcm_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_pcm_frames) / output_length;
-	const cc_u32f cdda_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_cdda_frames) / output_length;
 
-	cc_s16l output_buffer[MIXER_MAXIMUM_AUDIO_FRAMES_PER_FRAME * MIXER_CHANNEL_COUNT];
 	cc_s16l *output_buffer_pointer = output_buffer;
-	cc_u32f fm_position, pcm_position, cdda_position;
+	cc_u32f fm_position, psg_position, pcm_position;
 	cc_u32f i;
 
 	/* Resample, mix, and output the audio for this frame. */
-	for (i = 0, fm_position = 0, pcm_position = 0, cdda_position = 0; i < output_length; ++i, fm_position += fm_ratio, pcm_position += pcm_ratio, cdda_position += cdda_ratio)
+	for (i = 0, fm_position = 0, psg_position = 0, pcm_position = 0; i < output_length; ++i, fm_position += fm_ratio, psg_position += psg_ratio, pcm_position += pcm_ratio)
 	{
 		cc_s32f fm_frame[CLOWNMDEMU_FM_CHANNEL_COUNT];
+		cc_s32f psg_frame[CLOWNMDEMU_PSG_CHANNEL_COUNT];
 		cc_s32f pcm_frame[CLOWNMDEMU_PCM_CHANNEL_COUNT];
-		cc_s32f cdda_frame[CLOWNMDEMU_CDDA_CHANNEL_COUNT];
 
 		Mixer_Source_GetFrame(&state->fm, fm_frame, fm_position);
+		Mixer_Source_GetFrame(&state->psg, psg_frame, psg_position);
 		Mixer_Source_GetFrame(&state->pcm, pcm_frame, pcm_position);
-		Mixer_Source_GetFrame(&state->cdda, cdda_frame, cdda_position);
 
 		/* Mix the FM, PSG, PCM, and CDDA to produce the final audio. */
-		*output_buffer_pointer = fm_frame[0] / CLOWNMDEMU_FM_VOLUME_DIVISOR + state->psg.buffer[i] / CLOWNMDEMU_PSG_VOLUME_DIVISOR + pcm_frame[0] / CLOWNMDEMU_PCM_VOLUME_DIVISOR + cdda_frame[0] / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
+		*output_buffer_pointer = fm_frame[0] / CLOWNMDEMU_FM_VOLUME_DIVISOR + psg_frame[0] / CLOWNMDEMU_PSG_VOLUME_DIVISOR + pcm_frame[0] / CLOWNMDEMU_PCM_VOLUME_DIVISOR + *output_buffer_pointer / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
 		++output_buffer_pointer;
-		*output_buffer_pointer = fm_frame[1] / CLOWNMDEMU_FM_VOLUME_DIVISOR + state->psg.buffer[i] / CLOWNMDEMU_PSG_VOLUME_DIVISOR + pcm_frame[1] / CLOWNMDEMU_PCM_VOLUME_DIVISOR + cdda_frame[1] / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
+		*output_buffer_pointer = fm_frame[1] / CLOWNMDEMU_FM_VOLUME_DIVISOR + psg_frame[0] / CLOWNMDEMU_PSG_VOLUME_DIVISOR + pcm_frame[1] / CLOWNMDEMU_PCM_VOLUME_DIVISOR + *output_buffer_pointer / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
 		++output_buffer_pointer;
 	}
 
