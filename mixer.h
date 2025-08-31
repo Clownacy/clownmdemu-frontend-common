@@ -23,9 +23,18 @@ typedef struct Mixer_Source
 	size_t write_index;
 } Mixer_Source;
 
+enum
+{
+	MIXER_SOURCE_FM,
+	MIXER_SOURCE_PSG,
+	MIXER_SOURCE_PCM,
+	MIXER_SOURCE_CDDA,
+	MIXER_SOURCE_TOTAL
+};
+
 typedef struct Mixer_State
 {
-	Mixer_Source fm, psg, pcm, cdda;
+	Mixer_Source sources[MIXER_SOURCE_TOTAL];
 } Mixer_State;
 
 typedef void (*Mixer_Callback)(void *user_data, const cc_s16l *audio_samples, size_t total_frames);
@@ -247,68 +256,68 @@ cc_bool Mixer_Initialise(Mixer_State* const state, const cc_bool pal_mode)
 	const cc_u32f pcm_sample_rate = Mixer_GetCorrectedSampleRate(CLOWNMDEMU_PCM_SAMPLE_RATE, CLOWNMDEMU_PCM_SAMPLE_RATE, pal_mode);
 	const cc_u32f cdda_sample_rate = Mixer_GetCorrectedSampleRate(CLOWNMDEMU_CDDA_SAMPLE_RATE, CLOWNMDEMU_CDDA_SAMPLE_RATE, pal_mode);
 
-	const cc_bool fm_success = Mixer_Source_Initialise(&state->fm, CLOWNMDEMU_FM_CHANNEL_COUNT, fm_sample_rate);
-	const cc_bool psg_success = Mixer_Source_Initialise(&state->psg, CLOWNMDEMU_PSG_CHANNEL_COUNT, psg_sample_rate);
-	const cc_bool pcm_success = Mixer_Source_Initialise(&state->pcm, CLOWNMDEMU_PCM_CHANNEL_COUNT, pcm_sample_rate);
-	const cc_bool cdda_success = Mixer_Source_Initialise(&state->cdda, CLOWNMDEMU_CDDA_CHANNEL_COUNT, cdda_sample_rate);
+	const cc_bool fm_success = Mixer_Source_Initialise(&state->sources[MIXER_SOURCE_FM], CLOWNMDEMU_FM_CHANNEL_COUNT, fm_sample_rate);
+	const cc_bool psg_success = Mixer_Source_Initialise(&state->sources[MIXER_SOURCE_PSG], CLOWNMDEMU_PSG_CHANNEL_COUNT, psg_sample_rate);
+	const cc_bool pcm_success = Mixer_Source_Initialise(&state->sources[MIXER_SOURCE_PCM], CLOWNMDEMU_PCM_CHANNEL_COUNT, pcm_sample_rate);
+	const cc_bool cdda_success = Mixer_Source_Initialise(&state->sources[MIXER_SOURCE_CDDA], CLOWNMDEMU_CDDA_CHANNEL_COUNT, cdda_sample_rate);
 
 	if (fm_success && psg_success && pcm_success && cdda_success)
 		return cc_true;
 
 	if (fm_success)
-		Mixer_Source_Deinitialise(&state->fm);
+		Mixer_Source_Deinitialise(&state->sources[MIXER_SOURCE_FM]);
 	if (psg_success)
-		Mixer_Source_Deinitialise(&state->psg);
+		Mixer_Source_Deinitialise(&state->sources[MIXER_SOURCE_PSG]);
 	if (pcm_success)
-		Mixer_Source_Deinitialise(&state->pcm);
+		Mixer_Source_Deinitialise(&state->sources[MIXER_SOURCE_PCM]);
 	if (cdda_success)
-		Mixer_Source_Deinitialise(&state->cdda);
+		Mixer_Source_Deinitialise(&state->sources[MIXER_SOURCE_CDDA]);
 
 	return cc_false;
 }
 
 void Mixer_Deinitialise(Mixer_State* const state)
 {
-	Mixer_Source_Deinitialise(&state->fm);
-	Mixer_Source_Deinitialise(&state->psg);
-	Mixer_Source_Deinitialise(&state->pcm);
-	Mixer_Source_Deinitialise(&state->cdda);
+	Mixer_Source_Deinitialise(&state->sources[MIXER_SOURCE_FM]);
+	Mixer_Source_Deinitialise(&state->sources[MIXER_SOURCE_PSG]);
+	Mixer_Source_Deinitialise(&state->sources[MIXER_SOURCE_PCM]);
+	Mixer_Source_Deinitialise(&state->sources[MIXER_SOURCE_CDDA]);
 }
 
 void Mixer_Begin(Mixer_State* const state)
 {
-	Mixer_Source_NewFrame(&state->fm);
-	Mixer_Source_NewFrame(&state->psg);
-	Mixer_Source_NewFrame(&state->pcm);
-	Mixer_Source_NewFrame(&state->cdda);
+	Mixer_Source_NewFrame(&state->sources[MIXER_SOURCE_FM]);
+	Mixer_Source_NewFrame(&state->sources[MIXER_SOURCE_PSG]);
+	Mixer_Source_NewFrame(&state->sources[MIXER_SOURCE_PCM]);
+	Mixer_Source_NewFrame(&state->sources[MIXER_SOURCE_CDDA]);
 }
 
 cc_s16l* Mixer_AllocateFMSamples(Mixer_State* const state, const size_t total_frames)
 {
-	return Mixer_Source_AllocateFrames(&state->fm, total_frames);
+	return Mixer_Source_AllocateFrames(&state->sources[MIXER_SOURCE_FM], total_frames);
 }
 
 cc_s16l* Mixer_AllocatePSGSamples(Mixer_State* const state, const size_t total_frames)
 {
-	return Mixer_Source_AllocateFrames(&state->psg, total_frames);
+	return Mixer_Source_AllocateFrames(&state->sources[MIXER_SOURCE_PSG], total_frames);
 }
 
 cc_s16l* Mixer_AllocatePCMSamples(Mixer_State* const state, const size_t total_frames)
 {
-	return Mixer_Source_AllocateFrames(&state->pcm, total_frames);
+	return Mixer_Source_AllocateFrames(&state->sources[MIXER_SOURCE_PCM], total_frames);
 }
 
 cc_s16l* Mixer_AllocateCDDASamples(Mixer_State* const state, const size_t total_frames)
 {
-	return Mixer_Source_AllocateFrames(&state->cdda, total_frames);
+	return Mixer_Source_AllocateFrames(&state->sources[MIXER_SOURCE_CDDA], total_frames);
 }
 
 void Mixer_End(Mixer_State* const state, const Mixer_Callback callback, const void* const user_data)
 {
-	const size_t available_fm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->fm);
-	const size_t available_psg_frames = Mixer_Source_GetTotalAllocatedFrames(&state->psg);
-	const size_t available_pcm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->pcm);
-	const size_t available_cdda_frames = Mixer_Source_GetTotalAllocatedFrames(&state->cdda);
+	const size_t available_fm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->sources[MIXER_SOURCE_FM]);
+	const size_t available_psg_frames = Mixer_Source_GetTotalAllocatedFrames(&state->sources[MIXER_SOURCE_PSG]);
+	const size_t available_pcm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->sources[MIXER_SOURCE_PCM]);
+	const size_t available_cdda_frames = Mixer_Source_GetTotalAllocatedFrames(&state->sources[MIXER_SOURCE_CDDA]);
 
 	/* By orienting everything around the PSG, we avoid the need to resample the PSG! */
 	const cc_u32f output_length = available_psg_frames;
@@ -329,14 +338,14 @@ void Mixer_End(Mixer_State* const state, const Mixer_Callback callback, const vo
 		cc_s16f pcm_frame[CLOWNMDEMU_PCM_CHANNEL_COUNT];
 		cc_s16f cdda_frame[CLOWNMDEMU_CDDA_CHANNEL_COUNT];
 
-		Mixer_Source_GetFrame(&state->fm, fm_frame, fm_position);
-		Mixer_Source_GetFrame(&state->pcm, pcm_frame, pcm_position);
-		Mixer_Source_GetFrame(&state->cdda, cdda_frame, cdda_position);
+		Mixer_Source_GetFrame(&state->sources[MIXER_SOURCE_FM], fm_frame, fm_position);
+		Mixer_Source_GetFrame(&state->sources[MIXER_SOURCE_PCM], pcm_frame, pcm_position);
+		Mixer_Source_GetFrame(&state->sources[MIXER_SOURCE_CDDA], cdda_frame, cdda_position);
 
 		/* Mix the FM, PSG, PCM, and CDDA to produce the final audio. */
-		*output_buffer_pointer = fm_frame[0] / CLOWNMDEMU_FM_VOLUME_DIVISOR + state->psg.buffer[i] / CLOWNMDEMU_PSG_VOLUME_DIVISOR + pcm_frame[0] / CLOWNMDEMU_PCM_VOLUME_DIVISOR + cdda_frame[0] / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
+		*output_buffer_pointer = fm_frame[0] / CLOWNMDEMU_FM_VOLUME_DIVISOR + state->sources[MIXER_SOURCE_PSG].buffer[i] / CLOWNMDEMU_PSG_VOLUME_DIVISOR + pcm_frame[0] / CLOWNMDEMU_PCM_VOLUME_DIVISOR + cdda_frame[0] / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
 		++output_buffer_pointer;
-		*output_buffer_pointer = fm_frame[1] / CLOWNMDEMU_FM_VOLUME_DIVISOR + state->psg.buffer[i] / CLOWNMDEMU_PSG_VOLUME_DIVISOR + pcm_frame[1] / CLOWNMDEMU_PCM_VOLUME_DIVISOR + cdda_frame[1] / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
+		*output_buffer_pointer = fm_frame[1] / CLOWNMDEMU_FM_VOLUME_DIVISOR + state->sources[MIXER_SOURCE_PSG].buffer[i] / CLOWNMDEMU_PSG_VOLUME_DIVISOR + pcm_frame[1] / CLOWNMDEMU_PCM_VOLUME_DIVISOR + cdda_frame[1] / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
 		++output_buffer_pointer;
 	}
 
