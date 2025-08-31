@@ -23,6 +23,3 @@
 [submodule "clowncd"]
 	path = clowncd
 	url = https://github.com/Clownacy/clowncd
-[submodule "clownresampler"]
-	path = clownresampler
-	url = https://github.com/Clownacy/clownresampler
