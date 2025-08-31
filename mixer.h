@@ -179,7 +179,7 @@ static cc_bool Mixer_Source_Initialise(Mixer_Source* const source, const cc_u8f 
 	source->channels = channels;
 	/* The '+1' is just a lazy way of performing a rough ceiling division. */
 	source->capacity = 1 + MIXER_DIVIDE_BY_LOWEST_FRAMERATE(input_sample_rate);
-	source->buffer = (cc_s16l*)MIXER_CALLOC(1, (1 + source->capacity) * source->channels * sizeof(cc_s16l));
+	source->buffer = (cc_s16l*)MIXER_CALLOC(1, source->capacity * source->channels * sizeof(cc_s16l));
 	source->write_index = 0;
 
 	return source->buffer != NULL;
@@ -197,21 +197,15 @@ static cc_s16l* Mixer_Source_Buffer(Mixer_Source* const source, const size_t ind
 
 static void Mixer_Source_NewFrame(Mixer_Source* const source)
 {
-	/* To make the resampler happy, we need to maintain some padding frames. */
-	/* See clownresampler's documentation for more information. */
-
-	/* Copy the end of each buffer to its beginning, since we never used all of it. */
-	MIXER_MEMMOVE(source->buffer, Mixer_Source_Buffer(source, source->write_index), 1 * source->channels * sizeof(cc_s16l));
-
-	/* Blank the remainder of the buffers so that they can be mixed into. */
-	MIXER_MEMSET(Mixer_Source_Buffer(source, 1), 0, source->write_index * source->channels * sizeof(cc_s16l));
+	/* Blank the buffers so that they can be mixed into. */
+	MIXER_MEMSET(Mixer_Source_Buffer(source, 0), 0, source->write_index * source->channels * sizeof(cc_s16l));
 
 	source->write_index = 0;
 }
 
 static cc_s16l* Mixer_Source_AllocateFrames(Mixer_Source* const source, const size_t total_frames)
 {
-	cc_s16l* const allocated_samples = Mixer_Source_Buffer(source, 1 + source->write_index);
+	cc_s16l* const allocated_samples = Mixer_Source_Buffer(source, source->write_index);
 
 	source->write_index += total_frames;
 
@@ -234,12 +228,7 @@ static void Mixer_Source_GetFrame(Mixer_Source* const source, cc_s16f* const fra
 	cc_u8f i;
 
 	for (i = 0; i < total_channels; ++i)
-	{
-		const cc_u32f sample_position = frame_position + i;
-		const cc_s16f sample_base = source->buffer[sample_position];
-
-		frame[i] = sample_base;
-	}
+		frame[i] = source->buffer[frame_position + i];
 }
 
 /* Mixer API */
