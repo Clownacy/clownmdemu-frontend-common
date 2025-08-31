@@ -16,6 +16,11 @@
 #define MIXER_TO_FIXED_POINT_FROM_INTEGER(X) ((X) * MIXER_FIXED_POINT_FRACTIONAL_SIZE)
 #define MIXER_FIXED_POINT_MULTIPLY(MULTIPLICAND, MULTIPLIER) ((MULTIPLICAND) * (MULTIPLIER) / MIXER_FIXED_POINT_FRACTIONAL_SIZE)
 
+typedef struct Mixer_Constant
+{
+	ClownResampler_Precomputed resampler_precomputed;
+} Mixer_Constant;
+
 typedef struct Mixer_Source
 {
 	cc_u8f channels;
@@ -32,6 +37,7 @@ typedef struct Mixer_State
 
 typedef void (*Mixer_Callback)(void *user_data, const cc_s16l *audio_samples, size_t total_frames);
 
+void Mixer_Constant_Initialise(Mixer_Constant *constant);
 cc_bool Mixer_Initialise(Mixer_State *state, cc_bool pal_mode);
 void Mixer_Deinitialise(Mixer_State *state);
 void Mixer_Begin(Mixer_State *state);
@@ -39,7 +45,7 @@ cc_s16l* Mixer_AllocateFMSamples(Mixer_State *state, size_t total_frames);
 cc_s16l* Mixer_AllocatePSGSamples(Mixer_State *state, size_t total_frames);
 cc_s16l* Mixer_AllocatePCMSamples(Mixer_State *state, size_t total_frames);
 cc_s16l* Mixer_AllocateCDDASamples(Mixer_State *state, size_t total_frames);
-void Mixer_End(Mixer_State *state, Mixer_Callback callback, const void *user_data);
+void Mixer_End(Mixer_State *state, const Mixer_Constant *constant, Mixer_Callback callback, const void *user_data);
 
 #ifdef __cplusplus
 
@@ -58,17 +64,28 @@ void Mixer_End(Mixer_State *state, Mixer_Callback callback, const void *user_dat
 
 class Mixer
 {
+public:
+	class Constant : public Mixer_Constant
+	{
+	public:
+		Constant()
+		{
+			Mixer_Constant_Initialise(this);
+		}
+	};
+
 protected:
-	Mixer_State state;
 	bool initialised;
+	const Constant &constant;
+	Mixer_State state;
 
 public:
 	typedef Mixer_Callback Callback;
 
-	Mixer(const bool pal_mode)
-	{
-		initialised = Mixer_Initialise(&state, pal_mode);
-	}
+	Mixer(const Constant &constant, const bool pal_mode)
+		: initialised(Mixer_Initialise(&state, pal_mode))
+		, constant(constant)
+	{}
 	Mixer(const Mixer &other) = delete;
 	Mixer(Mixer &&other) = delete;
 	Mixer& operator=(const Mixer &other) = delete;
@@ -118,7 +135,7 @@ public:
 	void End(const Callback callback, const void* const user_data)
 	{
 		assert(Initialised());
-		Mixer_End(&state, callback, user_data);
+		Mixer_End(&state, &constant, callback, user_data);
 	}
 
 #if MIXER_CPLUSPLUS >= 201103L
@@ -176,8 +193,6 @@ public:
 
 /* Mixer Source */
 
-static ClownResampler_Precomputed resampler_precomputed;
-
 static cc_bool Mixer_Source_Initialise(Mixer_Source* const source, const cc_u8f channels, const cc_u32f input_sample_rate)
 {
 	ClownResampler_LowestLevel_Configure(&source->resampler, input_sample_rate, MIXER_OUTPUT_SAMPLE_RATE, MIXER_OUTPUT_SAMPLE_RATE);
@@ -233,18 +248,18 @@ static size_t Mixer_Source_GetTotalAllocatedFrames(const Mixer_Source* const sou
 	return source->write_index;
 }
 
-static void Mixer_Source_GetFrame(Mixer_Source* const source, cc_s32f* const frame, const cc_u32f position)
+static void Mixer_Source_GetFrame(Mixer_Source* const source, const ClownResampler_Precomputed* const resampler_precomputed, cc_s32f* const frame, const cc_u32f position)
 {
 	MIXER_MEMSET(frame, 0, source->channels * sizeof(*frame));
-	ClownResampler_LowestLevel_Resample(&source->resampler, &resampler_precomputed, frame, source->channels, source->buffer, CLOWNRESAMPLER_TO_INTEGER_FROM_FIXED_POINT_FLOOR(position), position % CLOWNRESAMPLER_FIXED_POINT_FRACTIONAL_SIZE);
+	ClownResampler_LowestLevel_Resample(&source->resampler, resampler_precomputed, frame, source->channels, source->buffer, CLOWNRESAMPLER_TO_INTEGER_FROM_FIXED_POINT_FLOOR(position), position % CLOWNRESAMPLER_FIXED_POINT_FRACTIONAL_SIZE);
 }
 
 /* Mixer API */
 
-static void Mixer_Constant_Initialise(void)
+void Mixer_Constant_Initialise(Mixer_Constant* const constant)
 {
-	/* Compute clownresampler's lookup tables.*/
-	ClownResampler_Precompute(&resampler_precomputed);
+	/* Compute ClownResampler's lookup tables.*/
+	ClownResampler_Precompute(&constant->resampler_precomputed);
 }
 
 static cc_u32f Mixer_GetCorrectedSampleRate(const cc_u32f sample_rate_ntsc, const cc_u32f sample_rate_pal, const cc_bool pal_mode)
@@ -265,9 +280,6 @@ cc_bool Mixer_Initialise(Mixer_State* const state, const cc_bool pal_mode)
 	const cc_bool psg_success = Mixer_Source_Initialise(&state->psg, CLOWNMDEMU_PSG_CHANNEL_COUNT, psg_sample_rate);
 	const cc_bool pcm_success = Mixer_Source_Initialise(&state->pcm, CLOWNMDEMU_PCM_CHANNEL_COUNT, pcm_sample_rate);
 	const cc_bool cdda_success = Mixer_Source_Initialise(&state->cdda, CLOWNMDEMU_CDDA_CHANNEL_COUNT, cdda_sample_rate);
-
-	/* TODO: Remove this. */
-	Mixer_Constant_Initialise();
 
 	if (fm_success && psg_success && pcm_success && cdda_success)
 		return cc_true;
@@ -320,8 +332,10 @@ cc_s16l* Mixer_AllocateCDDASamples(Mixer_State* const state, const size_t total_
 	return Mixer_Source_AllocateFrames(&state->cdda, total_frames);
 }
 
-void Mixer_End(Mixer_State* const state, const Mixer_Callback callback, const void* const user_data)
+void Mixer_End(Mixer_State* const state, const Mixer_Constant* const constant, const Mixer_Callback callback, const void* const user_data)
 {
+	const ClownResampler_Precomputed* const clownresampler_precomputed = &constant->resampler_precomputed;
+
 	const size_t available_fm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->fm);
 	const size_t available_psg_frames = Mixer_Source_GetTotalAllocatedFrames(&state->psg);
 	const size_t available_pcm_frames = Mixer_Source_GetTotalAllocatedFrames(&state->pcm);
@@ -346,9 +360,9 @@ void Mixer_End(Mixer_State* const state, const Mixer_Callback callback, const vo
 		cc_s32f psg_frame[CLOWNMDEMU_PSG_CHANNEL_COUNT];
 		cc_s32f pcm_frame[CLOWNMDEMU_PCM_CHANNEL_COUNT];
 
-		Mixer_Source_GetFrame(&state->fm, fm_frame, fm_position);
-		Mixer_Source_GetFrame(&state->psg, psg_frame, psg_position);
-		Mixer_Source_GetFrame(&state->pcm, pcm_frame, pcm_position);
+		Mixer_Source_GetFrame(&state->fm, clownresampler_precomputed, fm_frame, fm_position);
+		Mixer_Source_GetFrame(&state->psg, clownresampler_precomputed, psg_frame, psg_position);
+		Mixer_Source_GetFrame(&state->pcm, clownresampler_precomputed, pcm_frame, pcm_position);
 
 		/* Mix the FM, PSG, PCM, and CDDA to produce the final audio. */
 		*output_buffer_pointer = fm_frame[0] / CLOWNMDEMU_FM_VOLUME_DIVISOR + psg_frame[0] / CLOWNMDEMU_PSG_VOLUME_DIVISOR + pcm_frame[0] / CLOWNMDEMU_PCM_VOLUME_DIVISOR + *output_buffer_pointer / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
