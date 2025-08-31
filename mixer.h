@@ -25,10 +25,15 @@ typedef struct Mixer_Source
 
 enum
 {
+	/* The last enum is special; these are not. */
 	MIXER_SOURCE_FM,
-	MIXER_SOURCE_PSG,
 	MIXER_SOURCE_PCM,
 	MIXER_SOURCE_CDDA,
+
+	/* By orienting everything around the PSG, we avoid the need to resample the PSG! */
+	MIXER_SOURCE_PSG,
+
+	/* Ignore this; this is just the total number of enums. */
 	MIXER_SOURCE_TOTAL
 };
 
@@ -228,6 +233,15 @@ static size_t Mixer_Source_GetTotalAllocatedFrames(const Mixer_Source* const sou
 	return source->write_index;
 }
 
+static cc_s16l* Mixer_Source_GetFrame(Mixer_Source* const source, const cc_u32f position)
+{
+	const cc_u8f total_channels = source->channels;
+	const cc_u32f position_integral = position / MIXER_FIXED_POINT_FRACTIONAL_SIZE;
+	const cc_u32f frame_position = position_integral * total_channels;
+
+	return &source->buffer[frame_position];
+}
+
 /* Mixer API */
 
 static cc_u32f Mixer_GetCorrectedSampleRate(const cc_u32f sample_rate_ntsc, const cc_u32f sample_rate_pal, const cc_bool pal_mode)
@@ -245,9 +259,9 @@ cc_bool Mixer_Initialise(Mixer_State* const state, const cc_bool pal_mode)
 		cc_u8l channel_count;
 	} metadata[MIXER_SOURCE_TOTAL] = {
 		{CLOWNMDEMU_FM_SAMPLE_RATE_NTSC,  CLOWNMDEMU_FM_SAMPLE_RATE_PAL,  CLOWNMDEMU_FM_CHANNEL_COUNT  }, /* MIXER_SOURCE_FM   */
-		{CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC, CLOWNMDEMU_PSG_SAMPLE_RATE_PAL, CLOWNMDEMU_PSG_CHANNEL_COUNT }, /* MIXER_SOURCE_PSG  */
 		{CLOWNMDEMU_PCM_SAMPLE_RATE,      CLOWNMDEMU_PCM_SAMPLE_RATE,     CLOWNMDEMU_PCM_CHANNEL_COUNT }, /* MIXER_SOURCE_PCM  */
 		{CLOWNMDEMU_CDDA_SAMPLE_RATE,     CLOWNMDEMU_CDDA_SAMPLE_RATE,    CLOWNMDEMU_CDDA_CHANNEL_COUNT}, /* MIXER_SOURCE_CDDA */
+		{CLOWNMDEMU_PSG_SAMPLE_RATE_NTSC, CLOWNMDEMU_PSG_SAMPLE_RATE_PAL, CLOWNMDEMU_PSG_CHANNEL_COUNT }, /* MIXER_SOURCE_PSG  */
 	};
 
 	cc_bool successes[MIXER_SOURCE_TOTAL], success = cc_true;
@@ -309,39 +323,52 @@ cc_s16l* Mixer_AllocateCDDASamples(Mixer_State* const state, const size_t total_
 
 void Mixer_End(Mixer_State* const state, const Mixer_Callback callback, const void* const user_data)
 {
-	const size_t available_fm_frames   = Mixer_Source_GetTotalAllocatedFrames(&state->sources[MIXER_SOURCE_FM]);
-	const size_t available_psg_frames  = Mixer_Source_GetTotalAllocatedFrames(&state->sources[MIXER_SOURCE_PSG]);
-	const size_t available_pcm_frames  = Mixer_Source_GetTotalAllocatedFrames(&state->sources[MIXER_SOURCE_PCM]);
-	const size_t available_cdda_frames = Mixer_Source_GetTotalAllocatedFrames(&state->sources[MIXER_SOURCE_CDDA]);
-
-	/* By orienting everything around the PSG, we avoid the need to resample the PSG! */
-	const cc_u32f output_length = available_psg_frames;
-
-	const cc_u32f fm_ratio   = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_fm_frames) / output_length;
-	const cc_u32f pcm_ratio  = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_pcm_frames) / output_length;
-	const cc_u32f cdda_ratio = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_cdda_frames) / output_length;
-
 	cc_s16l output_buffer[MIXER_MAXIMUM_AUDIO_FRAMES_PER_FRAME * MIXER_CHANNEL_COUNT];
 	cc_s16l *output_buffer_pointer = output_buffer;
-	cc_u32f fm_position, pcm_position, cdda_position;
-	cc_u32f i;
+
+	size_t available_frames[MIXER_SOURCE_TOTAL];
+	cc_u32f position[MIXER_SOURCE_TOTAL - 1], ratio[MIXER_SOURCE_TOTAL - 1];
+
+	cc_u8f i;
+	cc_u32f frame_index;
+
+	for (i = 0; i < CC_COUNT_OF(available_frames); ++i)
+		available_frames[i] = Mixer_Source_GetTotalAllocatedFrames(&state->sources[i]);
+
+	for (i = 0; i < CC_COUNT_OF(position); ++i)
+	{
+		position[i] = 0;
+		ratio[i] = MIXER_TO_FIXED_POINT_FROM_INTEGER(available_frames[i]) / available_frames[MIXER_SOURCE_TOTAL - 1];
+	}
 
 	/* Resample, mix, and output the audio for this frame. */
-	for (i = 0, fm_position = 0, pcm_position = 0, cdda_position = 0; i < output_length; ++i, fm_position += fm_ratio, pcm_position += pcm_ratio, cdda_position += cdda_ratio)
+	for (frame_index = 0; frame_index < available_frames[MIXER_SOURCE_TOTAL - 1]; ++frame_index)
 	{
-		const cc_s16l* const fm_frame   = &state->sources[MIXER_SOURCE_FM  ].buffer[fm_position   / MIXER_FIXED_POINT_FRACTIONAL_SIZE * CLOWNMDEMU_FM_CHANNEL_COUNT  ];
-		const cc_s16l* const pcm_frame  = &state->sources[MIXER_SOURCE_PCM ].buffer[pcm_position  / MIXER_FIXED_POINT_FRACTIONAL_SIZE * CLOWNMDEMU_PCM_CHANNEL_COUNT ];
-		const cc_s16l* const cdda_frame = &state->sources[MIXER_SOURCE_CDDA].buffer[cdda_position / MIXER_FIXED_POINT_FRACTIONAL_SIZE * CLOWNMDEMU_CDDA_CHANNEL_COUNT];
+		const cc_s16l psg_sample = state->sources[MIXER_SOURCE_PSG].buffer[frame_index * CLOWNMDEMU_PSG_CHANNEL_COUNT] / CLOWNMDEMU_PSG_VOLUME_DIVISOR;
+
+		const cc_s16l *frame[MIXER_SOURCE_TOTAL - 1];
+
+		for (i = 0; i < CC_COUNT_OF(frame); ++i)
+			frame[i] = Mixer_Source_GetFrame(&state->sources[i], position[i]);
 
 		/* Mix the FM, PSG, PCM, and CDDA to produce the final audio. */
-		*output_buffer_pointer = fm_frame[0] / CLOWNMDEMU_FM_VOLUME_DIVISOR + state->sources[MIXER_SOURCE_PSG].buffer[i * CLOWNMDEMU_PSG_CHANNEL_COUNT] / CLOWNMDEMU_PSG_VOLUME_DIVISOR + pcm_frame[0] / CLOWNMDEMU_PCM_VOLUME_DIVISOR + cdda_frame[0] / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
+		*output_buffer_pointer = psg_sample +
+			frame[MIXER_SOURCE_FM][0] / CLOWNMDEMU_FM_VOLUME_DIVISOR +
+			frame[MIXER_SOURCE_PCM][0] / CLOWNMDEMU_PCM_VOLUME_DIVISOR +
+			frame[MIXER_SOURCE_CDDA][0] / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
 		++output_buffer_pointer;
-		*output_buffer_pointer = fm_frame[1] / CLOWNMDEMU_FM_VOLUME_DIVISOR + state->sources[MIXER_SOURCE_PSG].buffer[i * CLOWNMDEMU_PSG_CHANNEL_COUNT] / CLOWNMDEMU_PSG_VOLUME_DIVISOR + pcm_frame[1] / CLOWNMDEMU_PCM_VOLUME_DIVISOR + cdda_frame[1] / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
+		*output_buffer_pointer = psg_sample +
+			frame[MIXER_SOURCE_FM][1] / CLOWNMDEMU_FM_VOLUME_DIVISOR +
+			frame[MIXER_SOURCE_PCM][1] / CLOWNMDEMU_PCM_VOLUME_DIVISOR +
+			frame[MIXER_SOURCE_CDDA][1] / CLOWNMDEMU_CDDA_VOLUME_DIVISOR;
 		++output_buffer_pointer;
+
+		for (i = 0; i < CC_COUNT_OF(position); ++i)
+			position[i] += ratio[i];
 	}
 
 	/* Output resampled and mixed samples. */
-	callback((void*)user_data, output_buffer, output_length);
+	callback((void*)user_data, output_buffer, available_frames[MIXER_SOURCE_TOTAL - 1]);
 }
 
 #endif /* MIXER_IMPLEMENTATION */
