@@ -348,10 +348,10 @@ void Mixer_End(Mixer_State* const state, const Mixer_Callback callback, const vo
 		/* Beware: This code assumes that the sources are stereo! */
 #define MIXER_DO_SOURCE(SOURCE, VOLUME_DIVISOR) \
 		{ \
-			const cc_s16l* const frame = Mixer_Source_GetFrame(&state->sources[SOURCE], position[SOURCE]); \
+			const cc_s16l* const input_frame = Mixer_Source_GetFrame(&state->sources[SOURCE], position[SOURCE]); \
 \
-			for (i = 0; i < MIXER_CHANNEL_COUNT; ++i) \
-				output_buffer_pointer[i] += frame[i] / (VOLUME_DIVISOR); \
+			for (i = 0; i < CC_COUNT_OF(frame); ++i) \
+				frame[i] += input_frame[i] / (VOLUME_DIVISOR); \
 \
 			position[SOURCE] += ratio[SOURCE]; \
 		}
@@ -359,14 +359,18 @@ void Mixer_End(Mixer_State* const state, const Mixer_Callback callback, const vo
 		/* Mix the FM, PSG, PCM, and CDDA to produce the final audio. */
 		const cc_s16l psg_sample = state->sources[MIXER_SOURCE_PSG].buffer[frame_index * CLOWNMDEMU_PSG_CHANNEL_COUNT] / CLOWNMDEMU_PSG_VOLUME_DIVISOR;
 
-		for (i = 0; i < MIXER_CHANNEL_COUNT; ++i)
-			output_buffer_pointer[i] = psg_sample;
+		cc_s32f frame[MIXER_CHANNEL_COUNT];
+
+		for (i = 0; i < CC_COUNT_OF(frame); ++i)
+			frame[i] = psg_sample;
 
 		MIXER_DO_SOURCE(MIXER_SOURCE_FM,   CLOWNMDEMU_FM_VOLUME_DIVISOR  );
 		MIXER_DO_SOURCE(MIXER_SOURCE_PCM,  CLOWNMDEMU_PCM_VOLUME_DIVISOR );
 		MIXER_DO_SOURCE(MIXER_SOURCE_CDDA, CLOWNMDEMU_CDDA_VOLUME_DIVISOR);
 
-		output_buffer_pointer += MIXER_CHANNEL_COUNT;
+		/* Clamp output to S16 sample range. */
+		for (i = 0; i < CC_COUNT_OF(frame); ++i)
+			*output_buffer_pointer++ = CC_CLAMP(-0x7FFF, 0x7FFF, frame[i]);
 	}
 
 	/* Output resampled and mixed samples. */
