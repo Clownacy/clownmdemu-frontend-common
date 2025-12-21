@@ -157,7 +157,7 @@ cc_u32f CDReader_ReadAudio(CDReader_State* const state, cc_s16l* const sample_bu
 	return frames_read;
 }
 
-void CDReader_GetStateBackup(CDReader_State* const state, CDReader_StateBackup* const backup)
+void CDReader_GetStateBackup(const CDReader_State* const state, CDReader_StateBackup* const backup)
 {
 	backup->track_index = state->clowncd.track.current_track;
 	backup->sector_index = state->clowncd.track.current_sector;
