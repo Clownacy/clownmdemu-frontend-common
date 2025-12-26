@@ -88,8 +88,8 @@ public:
 
 	~Mixer()
 	{
-		assert(initialised);
-		Mixer_Deinitialise(&state);
+		if (initialised)
+			Mixer_Deinitialise(&state);
 	}
 
 	bool Initialised() const
