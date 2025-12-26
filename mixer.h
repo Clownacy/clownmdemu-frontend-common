@@ -90,11 +90,7 @@ public:
 		Mixer_Move(&state, &other.state);
 	}
 	Mixer& operator=(const Mixer &other) = delete;
-	Mixer& operator=(Mixer &&other)
-	{
-		Mixer_Move(&state, &other.state);
-		return *this;
-	}
+	Mixer& operator=(Mixer &&other) = default;
 
 	~Mixer()
 	{
