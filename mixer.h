@@ -46,7 +46,6 @@ typedef struct Mixer_State
 typedef void (*Mixer_Callback)(void *user_data, const cc_s16l *audio_samples, size_t total_frames);
 
 cc_bool Mixer_Initialise(Mixer_State *state, cc_bool pal_mode);
-void Mixer_Move(Mixer_State *destination, Mixer_State *source);
 void Mixer_Deinitialise(Mixer_State *state);
 void Mixer_Begin(Mixer_State *state);
 cc_s16l* Mixer_AllocateFMSamples(Mixer_State *state, size_t total_frames);
@@ -85,10 +84,7 @@ public:
 		initialised = Mixer_Initialise(&state, pal_mode);
 	}
 	Mixer(const Mixer &other) = delete;
-	Mixer(Mixer &&other)
-	{
-		Mixer_Move(&state, &other.state);
-	}
+	Mixer(Mixer &&other) = delete;
 	Mixer& operator=(const Mixer &other) = delete;
 	Mixer& operator=(Mixer &&other) = default;
 
@@ -204,12 +200,6 @@ static cc_bool Mixer_Source_Initialise(Mixer_Source* const source, const cc_u8f 
 	return source->buffer != NULL;
 }
 
-static void Mixer_Source_Move(Mixer_Source* const destination, Mixer_Source* const source)
-{
-	*destination = *source;
-	source->buffer = NULL;
-}
-
 static void Mixer_Source_Deinitialise(Mixer_Source* const source)
 {
 	MIXER_FREE(source->buffer);
@@ -294,14 +284,6 @@ cc_bool Mixer_Initialise(Mixer_State* const state, const cc_bool pal_mode)
 			Mixer_Source_Deinitialise(&state->sources[i]);
 
 	return cc_false;
-}
-
-void Mixer_Move(Mixer_State* const destination, Mixer_State* const source)
-{
-	cc_u8f i;
-
-	for (i = 0; i < CC_COUNT_OF(source->sources); ++i)
-		Mixer_Source_Move(&destination->sources[i], &source->sources[i]);
 }
 
 void Mixer_Deinitialise(Mixer_State* const state)
