@@ -44,7 +44,7 @@ typedef struct Mixer_State
 
 typedef void (*Mixer_Callback)(void *user_data, const cc_s16l *audio_samples, size_t total_frames);
 
-cc_bool Mixer_Initialise(Mixer_State *state, cc_bool pal_mode);
+cc_bool Mixer_Initialise(Mixer_State *state);
 void Mixer_Deinitialise(Mixer_State *state);
 void Mixer_Begin(Mixer_State *state);
 cc_s16l* Mixer_AllocateFMSamples(Mixer_State *state, size_t total_frames);
@@ -52,7 +52,6 @@ cc_s16l* Mixer_AllocatePSGSamples(Mixer_State *state, size_t total_frames);
 cc_s16l* Mixer_AllocatePCMSamples(Mixer_State *state, size_t total_frames);
 cc_s16l* Mixer_AllocateCDDASamples(Mixer_State *state, size_t total_frames);
 void Mixer_End(Mixer_State *state, Mixer_Callback callback, const void *user_data);
-cc_bool Mixer_SetPALMode(Mixer_State *state, cc_bool enabled);
 
 #ifdef __cplusplus
 
@@ -78,9 +77,9 @@ protected:
 public:
 	typedef Mixer_Callback Callback;
 
-	Mixer(const bool pal_mode)
+	Mixer()
 	{
-		initialised = Mixer_Initialise(&state, pal_mode);
+		initialised = Mixer_Initialise(&state);
 	}
 	Mixer(const Mixer &other) = delete;
 	Mixer(Mixer &&other) = delete;
@@ -147,12 +146,6 @@ public:
 		);
 	}
 #endif
-
-	void SetPALMode(const bool enabled)
-	{
-		assert(Initialised());
-		initialised = Mixer_SetPALMode(&state, enabled);
-	}
 };
 
 #endif
@@ -188,11 +181,10 @@ public:
 
 /* Mixer Source */
 
-static cc_bool Mixer_Source_Initialise(Mixer_Source* const source, const cc_u8f channels, const cc_u32f input_sample_rate)
+static cc_bool Mixer_Source_Initialise(Mixer_Source* const source, const cc_u8f channels, const size_t capacity)
 {
 	source->channels = channels;
-	/* The '+1' is just a lazy way of performing a rough ceiling division. */
-	source->capacity = 1 + MIXER_DIVIDE_BY_LOWEST_FRAMERATE(input_sample_rate);
+	source->capacity = capacity;
 	source->buffer = (cc_s16l*)MIXER_CALLOC(1, source->capacity * source->channels * sizeof(cc_s16l));
 	source->write_index = 0;
 
@@ -244,14 +236,7 @@ static cc_s16l* Mixer_Source_GetFrame(Mixer_Source* const source, const cc_u32f 
 
 /* Mixer API */
 
-static cc_u32f Mixer_GetCorrectedSampleRate(const cc_u32f sample_rate_ntsc, const cc_u32f sample_rate_pal, const cc_bool pal_mode)
-{
-	return pal_mode
-		? CLOWNMDEMU_MULTIPLY_BY_PAL_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_PAL_FRAMERATE(sample_rate_pal))
-		: CLOWNMDEMU_MULTIPLY_BY_NTSC_FRAMERATE(CLOWNMDEMU_DIVIDE_BY_NTSC_FRAMERATE(sample_rate_ntsc));
-}
-
-cc_bool Mixer_Initialise(Mixer_State* const state, const cc_bool pal_mode)
+cc_bool Mixer_Initialise(Mixer_State* const state)
 {
 	static const struct
 	{
@@ -269,8 +254,10 @@ cc_bool Mixer_Initialise(Mixer_State* const state, const cc_bool pal_mode)
 
 	for (i = 0; i < CC_COUNT_OF(state->sources); ++i)
 	{
-		const cc_u32f sample_rate = Mixer_GetCorrectedSampleRate(metadata[i].sample_rate_ntsc, metadata[i].sample_rate_pal, pal_mode);
-		successes[i] = Mixer_Source_Initialise(&state->sources[i], metadata[i].channel_count, sample_rate);
+		const cc_u32f sample_rate = CC_MAX(metadata[i].sample_rate_ntsc, metadata[i].sample_rate_pal);
+		/* The '+1' is just a lazy way of performing a rough ceiling division. */
+		const size_t capacity = 1 + MIXER_DIVIDE_BY_LOWEST_FRAMERATE(sample_rate);
+		successes[i] = Mixer_Source_Initialise(&state->sources[i], metadata[i].channel_count, capacity);
 
 		success = success && successes[i];
 	}
@@ -375,12 +362,6 @@ void Mixer_End(Mixer_State* const state, const Mixer_Callback callback, const vo
 
 	/* Output resampled and mixed samples. */
 	callback((void*)user_data, output_buffer, available_frames[MIXER_SOURCE_TOTAL - 1]);
-}
-
-cc_bool Mixer_SetPALMode(Mixer_State* const state, const cc_bool enabled)
-{
-	Mixer_Deinitialise(state);
-	return Mixer_Initialise(state, enabled);
 }
 
 #endif /* MIXER_IMPLEMENTATION */
