@@ -53,7 +53,6 @@ cc_s16l* Mixer_AllocatePSGSamples(Mixer_State *state, size_t total_frames);
 cc_s16l* Mixer_AllocatePCMSamples(Mixer_State *state, size_t total_frames);
 cc_s16l* Mixer_AllocateCDDASamples(Mixer_State *state, size_t total_frames);
 void Mixer_End(Mixer_State *state, Mixer_Callback callback, const void *user_data);
-cc_bool Mixer_SetPALMode(Mixer_State *state, cc_bool enabled);
 
 #ifdef __cplusplus
 
@@ -148,12 +147,6 @@ public:
 		);
 	}
 #endif
-
-	void SetPALMode(const bool enabled)
-	{
-		assert(Initialised());
-		initialised = Mixer_SetPALMode(&state, enabled);
-	}
 };
 
 #endif
@@ -376,12 +369,6 @@ void Mixer_End(Mixer_State* const state, const Mixer_Callback callback, const vo
 
 	/* Output resampled and mixed samples. */
 	callback((void*)user_data, output_buffer, available_frames[MIXER_SOURCE_TOTAL - 1]);
-}
-
-cc_bool Mixer_SetPALMode(Mixer_State* const state, const cc_bool enabled)
-{
-	Mixer_Deinitialise(state);
-	return Mixer_Initialise(state, enabled);
 }
 
 #endif /* MIXER_IMPLEMENTATION */
