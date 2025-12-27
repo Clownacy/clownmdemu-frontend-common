@@ -83,9 +83,20 @@ public:
 		initialised = Mixer_Initialise(&state, pal_mode);
 	}
 	Mixer(const Mixer &other) = delete;
-	Mixer(Mixer &&other) = delete;
+	Mixer(Mixer &&other)
+		: state(other.state)
+		, initialised(other.initialised)
+	{
+		for (cc_u8f i = 0; i < CC_COUNT_OF(other.state.sources); ++i)
+			other.state.sources[i].buffer = NULL;
+	}
 	Mixer& operator=(const Mixer &other) = delete;
-	Mixer& operator=(Mixer &&other) = default;
+	Mixer& operator=(Mixer &&other)
+	{
+		std::swap(state, other.state);
+		std::swap(initialised, other.initialised);
+		return *this;
+	}
 
 	~Mixer()
 	{
