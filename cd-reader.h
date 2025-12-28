@@ -53,6 +53,7 @@ void CDReader_GetStateBackup(const CDReader_State *state, CDReader_StateBackup *
 cc_bool CDReader_SetStateBackup(CDReader_State *state, const CDReader_StateBackup *backup);
 cc_bool CDReader_ReadMegaCDHeaderSector(CDReader_State* state, unsigned char* buffer);
 cc_bool CDReader_IsMegaCDGame(CDReader_State *state);
+cc_bool CDReader_IsDefinitelyACD(CDReader_State *state);
 
 #ifdef __cplusplus
 }

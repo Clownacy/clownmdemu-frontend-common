@@ -209,3 +209,8 @@ cc_bool CDReader_IsMegaCDGame(CDReader_State* const state)
 	CDReader_ReadMegaCDHeaderSector(state, first_sector);
 	return memcmp(first_sector, disc_identifier, sizeof(disc_identifier)) == 0;
 }
+
+cc_bool CDReader_IsDefinitelyACD(CDReader_State* const state)
+{
+	return state->clowncd.type != CLOWNCD_DISC_RAW_2048 || CDReader_IsMegaCDGame(state);
+}
