@@ -187,12 +187,12 @@ cc_bool CDReader_ReadMegaCDHeaderSector(CDReader_State* const state, unsigned ch
 	if (CDReader_IsOpen(state))
 	{
 		CDReader_StateBackup backup;
-		CDReader_GetStateBackup(state, &backup);
+		CDReader_SaveState(state, &backup);
 
 		if (CDReader_SeekToSector(state, 0) && ClownCD_ReadSector(&state->clowncd, buffer))
 			success = cc_true;
 
-		CDReader_SetStateBackup(state, &backup);
+		CDReader_LoadState(state, &backup);
 	}
 
 	if (!success)
