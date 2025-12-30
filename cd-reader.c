@@ -157,7 +157,7 @@ cc_u32f CDReader_ReadAudio(CDReader_State* const state, cc_s16l* const sample_bu
 	return frames_read;
 }
 
-void CDReader_GetStateBackup(const CDReader_State* const state, CDReader_StateBackup* const backup)
+void CDReader_SaveState(const CDReader_State* const state, CDReader_StateBackup* const backup)
 {
 	backup->track_index = state->clowncd.track.current_track;
 	backup->sector_index = state->clowncd.track.current_sector;
@@ -166,7 +166,7 @@ void CDReader_GetStateBackup(const CDReader_State* const state, CDReader_StateBa
 	backup->audio_playing = state->audio_playing;
 }
 
-cc_bool CDReader_SetStateBackup(CDReader_State* const state, const CDReader_StateBackup* const backup)
+cc_bool CDReader_LoadState(CDReader_State* const state, const CDReader_StateBackup* const backup)
 {
 	if (!CDReader_IsOpen(state))
 		return cc_false;

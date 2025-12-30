@@ -49,8 +49,8 @@ cc_bool CDReader_SeekToFrame(CDReader_State *state, CDReader_FrameIndex frame_in
 cc_bool CDReader_ReadSector(CDReader_State *state, cc_u16l *buffer);
 cc_bool CDReader_PlayAudio(CDReader_State *state, CDReader_TrackIndex track_index, CDReader_PlaybackSetting setting);
 cc_u32f CDReader_ReadAudio(CDReader_State *state, cc_s16l *sample_buffer, cc_u32f total_frames);
-void CDReader_GetStateBackup(const CDReader_State *state, CDReader_StateBackup *backup);
-cc_bool CDReader_SetStateBackup(CDReader_State *state, const CDReader_StateBackup *backup);
+void CDReader_SaveState(const CDReader_State *state, CDReader_StateBackup *backup);
+cc_bool CDReader_LoadState(CDReader_State *state, const CDReader_StateBackup *backup);
 cc_bool CDReader_ReadMegaCDHeaderSector(CDReader_State* state, unsigned char* buffer);
 cc_bool CDReader_IsMegaCDGame(CDReader_State *state);
 cc_bool CDReader_IsDefinitelyACD(CDReader_State *state);
