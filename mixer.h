@@ -56,7 +56,7 @@ void Mixer_End(Mixer_State *state, Mixer_Callback callback, const void *user_dat
 
 #ifdef __cplusplus
 
-// MSVC is FUCKING SHIT, setting '__cplusplus' to the wrong value in a direct violation of the C++ standard.
+/* MSVC is FUCKING SHIT, setting '__cplusplus' to the wrong value in a direct violation of the C++ standard. */
 #ifdef _MSVC_LANG
 #define MIXER_CPLUSPLUS _MSVC_LANG
 #else
