@@ -35,6 +35,8 @@ typedef struct CDReader_StateBackup
 	cc_bool audio_playing;
 } CDReader_StateBackup;
 
+typedef ClownCD_ErrorCallback CDReader_ErrorCallback;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -54,6 +56,7 @@ cc_bool CDReader_LoadState(CDReader_State *state, const CDReader_StateBackup *ba
 cc_bool CDReader_ReadMegaCDHeaderSector(CDReader_State* state, unsigned char* buffer);
 cc_bool CDReader_IsMegaCDGame(CDReader_State *state);
 cc_bool CDReader_IsDefinitelyACD(CDReader_State *state);
+#define CDReader_SetErrorCallback ClownCD_SetErrorCallback
 
 #ifdef __cplusplus
 }
