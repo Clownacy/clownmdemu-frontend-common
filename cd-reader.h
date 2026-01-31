@@ -29,7 +29,6 @@ typedef struct CDReader_State
 typedef struct CDReader_StateBackup
 {
 	CDReader_TrackIndex track_index;
-	CDReader_SectorIndex sector_index;
 	CDReader_FrameIndex frame_index;
 	CDReader_PlaybackSetting playback_setting;
 	cc_bool audio_playing;

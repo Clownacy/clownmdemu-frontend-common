@@ -19,7 +19,7 @@ void CDReader_Open(CDReader_State* const state, void* const stream, const char* 
 	if (CDReader_IsOpen(state))
 		CDReader_Close(state);
 
-	state->clowncd = ClownCD_OpenAlreadyOpen(stream, path, callbacks);
+	ClownCD_OpenAlreadyOpen(&state->clowncd, stream, path, callbacks);
 	state->open = cc_true;
 	state->audio_playing = cc_false;
 }
@@ -40,14 +40,10 @@ cc_bool CDReader_IsOpen(const CDReader_State* const state)
 
 cc_bool CDReader_SeekToSector(CDReader_State* const state, const CDReader_SectorIndex sector_index)
 {
-	ClownCD_CueTrackType track_type;
-
 	if (!CDReader_IsOpen(state))
 		return cc_false;
 
-	track_type = ClownCD_SeekTrackIndex(&state->clowncd, 1, 1);
-
-	if (track_type != CLOWNCD_CUE_TRACK_MODE1_2048 && track_type != CLOWNCD_CUE_TRACK_MODE1_2352)
+	if (!ClownCD_SeekTrackIndex(&state->clowncd, 1, 1))
 		return cc_false;
 
 	return ClownCD_SeekSector(&state->clowncd, sector_index);
@@ -97,7 +93,7 @@ cc_bool CDReader_PlayAudio(CDReader_State* const state, const CDReader_TrackInde
 
 	state->audio_playing = cc_false;
 
-	if (ClownCD_SeekTrackIndex(&state->clowncd, track_index, 1) != CLOWNCD_CUE_TRACK_AUDIO)
+	if (!ClownCD_SeekTrackIndex(&state->clowncd, track_index, 1))
 		return cc_false;
 
 	state->audio_playing = cc_true;
@@ -160,7 +156,6 @@ cc_u32f CDReader_ReadAudio(CDReader_State* const state, cc_s16l* const sample_bu
 void CDReader_SaveState(const CDReader_State* const state, CDReader_StateBackup* const backup)
 {
 	backup->track_index = state->clowncd.track.current_track;
-	backup->sector_index = state->clowncd.track.current_sector;
 	backup->frame_index = state->clowncd.track.current_frame;
 	backup->playback_setting = state->playback_setting;
 	backup->audio_playing = state->audio_playing;
@@ -171,7 +166,7 @@ cc_bool CDReader_LoadState(CDReader_State* const state, const CDReader_StateBack
 	if (!CDReader_IsOpen(state))
 		return cc_false;
 
-	if (ClownCD_SetState(&state->clowncd, backup->track_index, 1, backup->sector_index, backup->frame_index) == CLOWNCD_CUE_TRACK_INVALID)
+	if (!ClownCD_SetState(&state->clowncd, backup->track_index, 1, backup->frame_index))
 		return cc_false;
 
 	state->playback_setting = backup->playback_setting;
