@@ -7,7 +7,7 @@
 static struct
 {
 	Cheat_DecodedCheat code;
-	unsigned short old_rom_value;
+	cc_u16l old_rom_value;
 	cc_bool enabled;
 } cheats[0x100];
 
@@ -231,13 +231,14 @@ void Cheat_ApplyRAMPatches(ClownMDEmu* const clownmdemu)
 
 cc_bool Cheat_DecodeCheat(Cheat_DecodedCheat *const decoded_cheat, const char *const code)
 {
-	if (!Cheat_DecodeGameGenie(decoded_cheat, code) && !Cheat_DecodeActionReplay(decoded_cheat, code))
-	{
-		/*libretro_callbacks.log(RETRO_LOG_ERROR, "Cheat code '%s' is in an unrecognised format.\n", code);*/
-		return cc_false;
-	}
+	if (Cheat_DecodeGameGenie(decoded_cheat, code))
+		return cc_true;
 
-	return cc_true;
+	if (Cheat_DecodeActionReplay(decoded_cheat, code))
+		return cc_true;
+
+	/*libretro_callbacks.log(RETRO_LOG_ERROR, "Cheat code '%s' is in an unrecognised format.\n", code);*/
+	return cc_false;
 }
 
 void Cheat_ResetCheats(cc_u16l* const rom, const size_t rom_length)
