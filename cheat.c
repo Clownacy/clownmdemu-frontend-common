@@ -118,7 +118,7 @@ static cc_bool Cheat_DecodeGameGenie(Cheat_DecodedCheat* const cheat, const char
 	unsigned int combiner = 0, total_combined_bits = 0;
 
 	/* Read characters from string. */
-	if (sscanf(code, "%c%c%c%c-%c%c%c%c%ln",
+	if (sscanf(code, " %c%c%c%c - %c%c%c%c %ln",
 		&encoded_characters[0],
 		&encoded_characters[1],
 		&encoded_characters[2],
@@ -172,17 +172,17 @@ static cc_bool Cheat_DecodeActionReplay(Cheat_DecodedCheat* const cheat, const c
 	unsigned long total_read_characters;
 
 	/* Typical emulator format. */
-	if (sscanf(code, "%6lX%*1[: ]%4hX%ln", &cheat->address, &cheat->value, &total_read_characters) == 2 && total_read_characters == code_length)
+	if (sscanf(code, " %6lX%*1[: ]%4hX %ln", &cheat->address, &cheat->value, &total_read_characters) == 2 && total_read_characters == code_length)
 		return cc_true;
 
 	/* Format used by the real Action Replay. */
 	{
-		unsigned long first_value, first_value_end, second_value_start, second_value;
+		unsigned long first_value_start, first_value, first_value_end, second_value_start, second_value, second_value_end;
 
-		if (sscanf(code, "%5lX%ln %ln%5lX%ln", &first_value, &first_value_end, &second_value_start, &second_value, &total_read_characters) == 2 && total_read_characters == code_length)
+		if (sscanf(code, " %ln%5lX%ln %ln%5lX%ln %ln", &first_value_start, &first_value, &first_value_end, &second_value_start, &second_value, &second_value_end, &total_read_characters) == 2 && total_read_characters == code_length)
 		{
-			const unsigned long first_value_length = first_value_end;
-			const unsigned long second_value_length = total_read_characters - second_value_start;
+			const unsigned long first_value_length = first_value_end - first_value_start;
+			const unsigned long second_value_length = second_value_end - second_value_start;
 
 			if (first_value_length == 5 && second_value_length == 5)
 			{
