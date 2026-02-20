@@ -259,15 +259,13 @@ cc_bool Cheat_AddDecodedCheat(cc_u16l* const rom, const size_t rom_length, const
 		return cc_false;
 	}
 
-	if (Cheat_IsROMCheat(decoded_cheat))
-		Cheat_UndoROMPatches(rom, rom_length);
+	Cheat_UndoROMPatches(rom, rom_length);
 
 	/* Code is valid; add to the list. */
 	cheats[index].code = *decoded_cheat;
 	cheats[index].enabled = enabled;
 
-	if (Cheat_IsROMCheat(decoded_cheat))
-		Cheat_ApplyROMPatches(rom, rom_length);
+	Cheat_ApplyROMPatches(rom, rom_length);
 
 	return cc_true;
 }
