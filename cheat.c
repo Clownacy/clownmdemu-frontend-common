@@ -213,7 +213,7 @@ void Cheat_ResetCheats(cc_u16l* const rom, const size_t rom_length)
 	memset(&cheats, 0, sizeof(cheats));
 }
 
-cc_bool Cheat_AddDecodedCheat(cc_u16l* const rom, const size_t rom_length, const unsigned int index, const cc_bool enabled, Cheat_DecodedCheat* const decoded_cheat)
+cc_bool Cheat_AddDecodedCheat(cc_u16l* const rom, const size_t rom_length, const unsigned int index, const cc_bool enabled, const Cheat_DecodedCheat* const decoded_cheat)
 {
 	if (index >= CC_COUNT_OF(cheats))
 	{

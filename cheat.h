@@ -21,7 +21,7 @@ void Cheat_ApplyRAMPatches(ClownMDEmu *clownmdemu);
 cc_bool Cheat_DecodeCheat(Cheat_DecodedCheat *decoded_cheat, const char *code);
 
 void Cheat_ResetCheats(cc_u16l *rom, size_t rom_length);
-cc_bool Cheat_AddDecodedCheat(cc_u16l *rom, size_t rom_length, unsigned int index, cc_bool enabled, Cheat_DecodedCheat *decoded_cheat);
+cc_bool Cheat_AddDecodedCheat(cc_u16l *rom, size_t rom_length, unsigned int index, cc_bool enabled, const Cheat_DecodedCheat *decoded_cheat);
 cc_bool Cheat_AddCheat(cc_u16l *rom, size_t rom_length, unsigned int index, cc_bool enabled, const char *code);
 
 #ifdef __cplusplus
