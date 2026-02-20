@@ -172,7 +172,7 @@ static cc_bool Cheat_DecodeActionReplay(Cheat_DecodedCheat* const cheat, const c
 	unsigned long total_read_characters;
 
 	/* Typical emulator format. */
-	if (sscanf(code, "%6lX:%4hX%ln", &cheat->address, &cheat->value, &total_read_characters) == 2 && total_read_characters == code_length)
+	if (sscanf(code, "%6lX%*1[: ]%4hX%ln", &cheat->address, &cheat->value, &total_read_characters) == 2 && total_read_characters == code_length)
 		return cc_true;
 
 	/* Format used by the real Action Replay. */
