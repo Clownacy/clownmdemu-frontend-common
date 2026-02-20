@@ -113,11 +113,12 @@ static cc_bool Cheat_DecodeGameGenie(Cheat_DecodedCheat* const cheat, const char
 {
 	unsigned int i;
 	char encoded_characters[8];
+	unsigned long total_read_characters;
 	unsigned int decoded_bytes[5], current_decoded_byte = 0;
 	unsigned int combiner = 0, total_combined_bits = 0;
 
 	/* Read characters from string. */
-	if (sscanf(code, "%c%c%c%c-%c%c%c%c",
+	if (sscanf(code, "%c%c%c%c-%c%c%c%c%ln",
 		&encoded_characters[0],
 		&encoded_characters[1],
 		&encoded_characters[2],
@@ -125,7 +126,12 @@ static cc_bool Cheat_DecodeGameGenie(Cheat_DecodedCheat* const cheat, const char
 		&encoded_characters[4],
 		&encoded_characters[5],
 		&encoded_characters[6],
-		&encoded_characters[7]) != 8)
+		&encoded_characters[7],
+		&total_read_characters) != 8)
+		return cc_false;
+
+	/* Make sure that the entire code is processed! */
+	if (total_read_characters != strlen(code))
 		return cc_false;
 
 	/* Decode characters to 5-bit integers and combine them into 8-bit integers. */
@@ -161,7 +167,33 @@ static cc_bool Cheat_DecodeGameGenie(Cheat_DecodedCheat* const cheat, const char
 
 static cc_bool Cheat_DecodeActionReplay(Cheat_DecodedCheat* const cheat, const char* const code)
 {
-	return sscanf(code, "%lX:%hX", &cheat->address, &cheat->value) == 2;
+	const size_t code_length = strlen(code);
+
+	unsigned long total_read_characters;
+
+	/* Typical emulator format. */
+	if (sscanf(code, "%6lX:%4hX%ln", &cheat->address, &cheat->value, &total_read_characters) == 2 && total_read_characters == code_length)
+		return cc_true;
+
+	/* Format used by the real Action Replay. */
+	{
+		unsigned long first_value, first_value_end, second_value_start, second_value;
+
+		if (sscanf(code, "%5lX%ln %ln%5lX%ln", &first_value, &first_value_end, &second_value_start, &second_value, &total_read_characters) == 2 && total_read_characters == code_length)
+		{
+			const unsigned long first_value_length = first_value_end;
+			const unsigned long second_value_length = total_read_characters - second_value_start;
+
+			if (first_value_length == 5 && second_value_length == 5)
+			{
+				cheat->address = first_value << 4 | second_value >> 16;
+				cheat->value = second_value & 0xFFFF;
+				return cc_true;
+			}
+		}
+	}
+
+	return cc_false;
 }
 
 void Cheat_UndoROMPatches(cc_u16l* const rom, const size_t rom_length)
