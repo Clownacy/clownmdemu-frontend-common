@@ -5,6 +5,8 @@ project(clownmdemu-frontend-common LANGUAGES C)
 add_library(clownmdemu-frontend-common STATIC
 	"cd-reader.c"
 	"cd-reader.h"
+	"cheat.c"
+	"cheat.h"
 	"mixer.h"
 )
 

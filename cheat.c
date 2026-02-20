@@ -164,22 +164,27 @@ static cc_bool Cheat_DecodeActionReplay(Cheat_DecodedCheat* const cheat, const c
 	return sscanf(code, "%lX:%hX", &cheat->address, &cheat->value) == 2;
 }
 
-static void Cheat_UndoROMPatches(cc_u16l* const rom, const size_t rom_length)
+void Cheat_UndoROMPatches(cc_u16l* const rom, const size_t rom_length)
 {
 	size_t i;
 
-	for (i = 0; i < CC_COUNT_OF(cheats); ++i)
+	for (i = CC_COUNT_OF(cheats); i-- != 0; )
 		if (cheats[i].enabled && Cheat_IsROMCheat(&cheats[i].code))
 			rom[cheats[i].code.address / 2] = cheats[i].old_rom_value;
 }
 
-static void Cheat_ApplyROMPatches(cc_u16l* const rom, const size_t rom_length)
+void Cheat_ApplyROMPatches(cc_u16l* const rom, const size_t rom_length)
 {
 	size_t i;
 
 	for (i = 0; i < CC_COUNT_OF(cheats); ++i)
+	{
 		if (cheats[i].enabled && Cheat_IsROMCheat(&cheats[i].code))
+		{
+			cheats[i].old_rom_value = rom[cheats[i].code.address / 2];
 			rom[cheats[i].code.address / 2] = cheats[i].code.value;
+		}
+	}
 }
 
 void Cheat_ApplyRAMPatches(ClownMDEmu* const clownmdemu)
@@ -191,51 +196,58 @@ void Cheat_ApplyRAMPatches(ClownMDEmu* const clownmdemu)
 			clownmdemu->state.m68k.ram[(cheats[i].code.address / 2) % CC_COUNT_OF(clownmdemu->state.m68k.ram)] = cheats[i].code.value;
 }
 
+cc_bool Cheat_DecodeCheat(Cheat_DecodedCheat *const decoded_cheat, const char *const code)
+{
+	if (!Cheat_DecodeGameGenie(decoded_cheat, code) && !Cheat_DecodeActionReplay(decoded_cheat, code))
+	{
+		/*libretro_callbacks.log(RETRO_LOG_ERROR, "Cheat code '%s' is in an unrecognised format.\n", code);*/
+		return cc_false;
+	}
+
+	return cc_true;
+}
+
 void Cheat_ResetCheats(cc_u16l* const rom, const size_t rom_length)
 {
 	Cheat_UndoROMPatches(rom, rom_length);
 	memset(&cheats, 0, sizeof(cheats));
 }
 
-cc_bool Cheat_AddCheat(cc_u16l* const rom, const size_t rom_length, const unsigned int index, const cc_bool enabled, const char* const code)
+cc_bool Cheat_AddDecodedCheat(cc_u16l* const rom, const size_t rom_length, const unsigned int index, const cc_bool enabled, Cheat_DecodedCheat* const decoded_cheat)
 {
-	Cheat_DecodedCheat decoded_cheat;
-
 	if (index >= CC_COUNT_OF(cheats))
 	{
 		/*libretro_callbacks.log(RETRO_LOG_ERROR, "Cheat code %u (%s) has an index which exceeds the size of the cheat code buffer (%lu)!\n", index, code, (unsigned long)CC_COUNT_OF(cheats));*/
 		return cc_false;
 	}
 
-	if (!Cheat_DecodeGameGenie(&decoded_cheat, code) && !Cheat_DecodeActionReplay(&decoded_cheat, code))
-	{
-		/*libretro_callbacks.log(RETRO_LOG_ERROR, "Cheat code '%s' is in an unrecognised format.\n", code);*/
-		return cc_false;
-	}
-
-	/*libretro_callbacks.log(RETRO_LOG_INFO, "Cheat code %u (%s) decoded to '%06lX-%04X'.\n", index, code, decoded_cheat.address, decoded_cheat.value);*/
-
-	if (decoded_cheat.address % 2 != 0)
+	if (decoded_cheat->address % 2 != 0)
 	{
 		/*libretro_callbacks.log(RETRO_LOG_ERROR, "Cheat code %u (%s) decodes to an odd address (0x%06lX), which is invalid!\n", index, code, decoded_cheat.address);*/
 		return cc_false;
 	}
 
-	if (!Cheat_IsROMCheat(&decoded_cheat) && !Cheat_IsRAMCheat(&decoded_cheat))
-	{
-		/*libretro_callbacks.log(RETRO_LOG_ERROR, "Cheat code %u (%s) decodes to an unsupported address range (0x%06lX)!\n", index, code, decoded_cheat.address);*/
-		return cc_false;
-	}
-
-	Cheat_UndoROMPatches(rom, rom_length);
+	if (Cheat_IsROMCheat(decoded_cheat))
+		Cheat_UndoROMPatches(rom, rom_length);
 
 	/* Code is valid; add to the list. */
-	cheats[index].code = decoded_cheat;
-	if (Cheat_IsROMCheat(&decoded_cheat))
-		cheats[index].old_rom_value = rom[decoded_cheat.address / 2];
+	cheats[index].code = *decoded_cheat;
 	cheats[index].enabled = enabled;
 
-	Cheat_ApplyROMPatches(rom, rom_length);
+	if (Cheat_IsROMCheat(decoded_cheat))
+		Cheat_ApplyROMPatches(rom, rom_length);
 
 	return cc_true;
+}
+
+cc_bool Cheat_AddCheat(cc_u16l *const rom, const size_t rom_length, const unsigned int index, const cc_bool enabled, const char* const code)
+{
+	Cheat_DecodedCheat decoded_cheat;
+
+	if (!Cheat_DecodeCheat(&decoded_cheat, code))
+		return cc_false;
+
+	/*libretro_callbacks.log(RETRO_LOG_INFO, "Cheat code %u (%s) decoded to '%06lX-%04X'.\n", index, code, decoded_cheat.address, decoded_cheat.value);*/
+
+	return Cheat_AddDecodedCheat(rom, rom_length, index, enabled, &decoded_cheat);
 }
