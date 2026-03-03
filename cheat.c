@@ -113,12 +113,12 @@ static cc_bool Cheat_DecodeGameGenie(Cheat_DecodedCheat* const cheat, const char
 {
 	unsigned int i;
 	char encoded_characters[8];
-	unsigned long total_read_characters;
+	int total_read_characters;
 	unsigned int decoded_bytes[5], current_decoded_byte = 0;
 	unsigned int combiner = 0, total_combined_bits = 0;
 
 	/* Read characters from string. */
-	if (sscanf(code, " %c%c%c%c - %c%c%c%c %ln",
+	if (sscanf(code, " %c%c%c%c - %c%c%c%c %n",
 		&encoded_characters[0],
 		&encoded_characters[1],
 		&encoded_characters[2],
@@ -131,7 +131,7 @@ static cc_bool Cheat_DecodeGameGenie(Cheat_DecodedCheat* const cheat, const char
 		return cc_false;
 
 	/* Make sure that the entire code is processed! */
-	if (total_read_characters != strlen(code))
+	if ((size_t)total_read_characters != strlen(code))
 		return cc_false;
 
 	/* Decode characters to 5-bit integers and combine them into 8-bit integers. */
@@ -169,21 +169,21 @@ static cc_bool Cheat_DecodeActionReplay(Cheat_DecodedCheat* const cheat, const c
 {
 	const size_t code_length = strlen(code);
 
-	unsigned int total_read_characters;
+	int total_read_characters;
 
 	/* Typical emulator format. */
-	if (sscanf(code, " %6lX%*1[: ]%4hX %n", &cheat->address, &cheat->value, &total_read_characters) == 2 && total_read_characters == code_length)
+	if (sscanf(code, " %6lX%*1[: ]%4hX %n", &cheat->address, &cheat->value, &total_read_characters) == 2 && (size_t)total_read_characters == code_length)
 		return cc_true;
 
 	/* Format used by the real Action Replay. */
 	{
 		unsigned long first_value, second_value;
-		unsigned int first_value_start, first_value_end, second_value_start, second_value_end;
+		int first_value_start, first_value_end, second_value_start, second_value_end;
 
-		if (sscanf(code, " %n%5lX%n %n%5lX%n %n", &first_value_start, &first_value, &first_value_end, &second_value_start, &second_value, &second_value_end, &total_read_characters) == 2 && total_read_characters == code_length)
+		if (sscanf(code, " %n%5lX%n %n%5lX%n %n", &first_value_start, &first_value, &first_value_end, &second_value_start, &second_value, &second_value_end, &total_read_characters) == 2 && (size_t)total_read_characters == code_length)
 		{
-			const unsigned int first_value_length = first_value_end - first_value_start;
-			const unsigned int second_value_length = second_value_end - second_value_start;
+			const int first_value_length = first_value_end - first_value_start;
+			const int second_value_length = second_value_end - second_value_start;
 
 			if (first_value_length == 5 && second_value_length == 5)
 			{
