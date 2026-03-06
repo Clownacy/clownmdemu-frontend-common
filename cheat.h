@@ -40,4 +40,52 @@ cc_bool CheatManager_AddCheat(CheatManager *manager, cc_u16l *rom, size_t rom_le
 }
 #endif
 
+#ifdef __cplusplus
+#include <cstddef>
+
+class CheatManagerCXX : private CheatManager
+{
+public:
+	CheatManagerCXX()
+		: CheatManager({})
+	{}
+
+	void UndoROMPatches(cc_u16l* const rom, const std::size_t rom_length)
+	{
+		CheatManager_UndoROMPatches(this, rom, rom_length);
+	}
+
+	void ApplyROMPatches(cc_u16l* const rom, const std::size_t rom_length)
+	{
+		CheatManager_ApplyROMPatches(this, rom, rom_length);
+	}
+
+	void ApplyRAMPatches(ClownMDEmu* const clownmdemu)
+	{
+		CheatManager_ApplyRAMPatches(this, clownmdemu);
+	}
+
+	static bool DecodeCheat(CheatManager_DecodedCheat* const decoded_cheat, const char* const code)
+	{
+		return CheatManager_DecodeCheat(decoded_cheat, code);
+	}
+
+	void ResetCheats(cc_u16l* const rom, const std::size_t rom_length)
+	{
+		CheatManager_ResetCheats(this, rom, rom_length);
+	}
+
+	bool AddDecodedCheat(cc_u16l *const rom, const std::size_t rom_length, const unsigned int index, const bool enabled, const CheatManager_DecodedCheat *const decoded_cheat)
+	{
+		return CheatManager_AddDecodedCheat(this, rom, rom_length, index, enabled, decoded_cheat);
+	}
+
+	bool AddCheat(cc_u16l* const rom, const std::size_t rom_length, const unsigned int index, const bool enabled, const char* const code)
+	{
+		return CheatManager_AddCheat(this, rom, rom_length, index, enabled, code);
+	}
+};
+
+#endif
+
 #endif /* CLOWNMDEMU_FRONTEND_COMMON_CHEAT_H */
