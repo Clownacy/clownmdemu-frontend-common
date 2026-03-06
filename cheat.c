@@ -11,6 +11,8 @@ static struct
 	cc_bool enabled;
 } cheats[0x100];
 
+unsigned int total_cheats;
+
 #define Cheat_IsROMCheat(CHEAT) (((CHEAT)->address & 0xFFFFFF) < rom_length * 2)
 #define Cheat_IsRAMCheat(CHEAT) (((CHEAT)->address & 0xFFFFFF) >= 0xE00000)
 
@@ -199,18 +201,18 @@ static cc_bool Cheat_DecodeActionReplay(Cheat_DecodedCheat* const cheat, const c
 
 void Cheat_UndoROMPatches(cc_u16l* const rom, const size_t rom_length)
 {
-	size_t i;
+	unsigned int i;
 
-	for (i = CC_COUNT_OF(cheats); i-- != 0; )
+	for (i = total_cheats; i-- != 0; )
 		if (cheats[i].enabled && Cheat_IsROMCheat(&cheats[i].code))
 			rom[cheats[i].code.address / 2] = cheats[i].old_rom_value;
 }
 
 void Cheat_ApplyROMPatches(cc_u16l* const rom, const size_t rom_length)
 {
-	size_t i;
+	unsigned int i;
 
-	for (i = 0; i < CC_COUNT_OF(cheats); ++i)
+	for (i = 0; i < total_cheats; ++i)
 	{
 		if (cheats[i].enabled && Cheat_IsROMCheat(&cheats[i].code))
 		{
@@ -222,9 +224,9 @@ void Cheat_ApplyROMPatches(cc_u16l* const rom, const size_t rom_length)
 
 void Cheat_ApplyRAMPatches(ClownMDEmu* const clownmdemu)
 {
-	size_t i;
+	unsigned int i;
 
-	for (i = 0; i < CC_COUNT_OF(cheats); ++i)
+	for (i = 0; i < total_cheats; ++i)
 		if (cheats[i].enabled && Cheat_IsRAMCheat(&cheats[i].code))
 			clownmdemu->state.m68k.ram[(cheats[i].code.address / 2) % CC_COUNT_OF(clownmdemu->state.m68k.ram)] = cheats[i].code.value;
 }
@@ -245,6 +247,7 @@ void Cheat_ResetCheats(cc_u16l* const rom, const size_t rom_length)
 {
 	Cheat_UndoROMPatches(rom, rom_length);
 	memset(&cheats, 0, sizeof(cheats));
+	total_cheats = 0;
 }
 
 cc_bool Cheat_AddDecodedCheat(cc_u16l* const rom, const size_t rom_length, const unsigned int index, const cc_bool enabled, const Cheat_DecodedCheat* const decoded_cheat)
@@ -266,6 +269,8 @@ cc_bool Cheat_AddDecodedCheat(cc_u16l* const rom, const size_t rom_length, const
 	/* Code is valid; add to the list. */
 	cheats[index].code = *decoded_cheat;
 	cheats[index].enabled = enabled;
+
+	total_cheats = CC_MIN(total_cheats, index);
 
 	Cheat_ApplyROMPatches(rom, rom_length);
 
