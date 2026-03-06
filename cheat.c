@@ -4,19 +4,10 @@
 #include <stdio.h>
 #include <string.h>
 
-static struct
-{
-	Cheat_DecodedCheat code;
-	cc_u16l old_rom_value;
-	cc_bool enabled;
-} cheats[0x100];
+#define CheatManager_IsROMCheat(CHEAT) (((CHEAT)->address & 0xFFFFFF) < rom_length * 2)
+#define CheatManager_IsRAMCheat(CHEAT) (((CHEAT)->address & 0xFFFFFF) >= 0xE00000)
 
-unsigned int total_cheats;
-
-#define Cheat_IsROMCheat(CHEAT) (((CHEAT)->address & 0xFFFFFF) < rom_length * 2)
-#define Cheat_IsRAMCheat(CHEAT) (((CHEAT)->address & 0xFFFFFF) >= 0xE00000)
-
-static char Cheat_DecodeGameGenieCharacter(const char character)
+static char CheatManager_DecodeGameGenieCharacter(const char character)
 {
 	switch (character)
 	{
@@ -111,7 +102,7 @@ static char Cheat_DecodeGameGenieCharacter(const char character)
 	return -1;
 }
 
-static cc_bool Cheat_DecodeGameGenie(Cheat_DecodedCheat* const cheat, const char* const code)
+static cc_bool CheatManager_DecodeGameGenie(CheatManager_DecodedCheat* const cheat, const char* const code)
 {
 	unsigned int i;
 	char encoded_characters[8];
@@ -139,7 +130,7 @@ static cc_bool Cheat_DecodeGameGenie(Cheat_DecodedCheat* const cheat, const char
 	/* Decode characters to 5-bit integers and combine them into 8-bit integers. */
 	for (i = 0; i < CC_COUNT_OF(encoded_characters); ++i)
 	{
-		const char decoded_integer = Cheat_DecodeGameGenieCharacter(encoded_characters[i]);
+		const char decoded_integer = CheatManager_DecodeGameGenieCharacter(encoded_characters[i]);
 
 		if (decoded_integer < 0)
 			return cc_false;
@@ -167,7 +158,7 @@ static cc_bool Cheat_DecodeGameGenie(Cheat_DecodedCheat* const cheat, const char
 	return cc_true;
 }
 
-static cc_bool Cheat_DecodeActionReplay(Cheat_DecodedCheat* const cheat, const char* const code)
+static cc_bool CheatManager_DecodeActionReplay(CheatManager_DecodedCheat* const cheat, const char* const code)
 {
 	const size_t code_length = strlen(code);
 
@@ -199,60 +190,60 @@ static cc_bool Cheat_DecodeActionReplay(Cheat_DecodedCheat* const cheat, const c
 	return cc_false;
 }
 
-void Cheat_UndoROMPatches(cc_u16l* const rom, const size_t rom_length)
+void CheatManager_UndoROMPatches(CheatManager* const manager, cc_u16l* const rom, const size_t rom_length)
 {
 	unsigned int i;
 
-	for (i = total_cheats; i-- != 0; )
-		if (cheats[i].enabled && Cheat_IsROMCheat(&cheats[i].code))
-			rom[cheats[i].code.address / 2] = cheats[i].old_rom_value;
+	for (i = manager->total_cheats; i-- != 0; )
+		if (manager->cheats[i].enabled && CheatManager_IsROMCheat(&manager->cheats[i].code))
+			rom[manager->cheats[i].code.address / 2] = manager->cheats[i].old_rom_value;
 }
 
-void Cheat_ApplyROMPatches(cc_u16l* const rom, const size_t rom_length)
+void CheatManager_ApplyROMPatches(CheatManager* const manager, cc_u16l* const rom, const size_t rom_length)
 {
 	unsigned int i;
 
-	for (i = 0; i < total_cheats; ++i)
+	for (i = 0; i < manager->total_cheats; ++i)
 	{
-		if (cheats[i].enabled && Cheat_IsROMCheat(&cheats[i].code))
+		if (manager->cheats[i].enabled && CheatManager_IsROMCheat(&manager->cheats[i].code))
 		{
-			cheats[i].old_rom_value = rom[cheats[i].code.address / 2];
-			rom[cheats[i].code.address / 2] = cheats[i].code.value;
+			manager->cheats[i].old_rom_value = rom[manager->cheats[i].code.address / 2];
+			rom[manager->cheats[i].code.address / 2] = manager->cheats[i].code.value;
 		}
 	}
 }
 
-void Cheat_ApplyRAMPatches(ClownMDEmu* const clownmdemu)
+void CheatManager_ApplyRAMPatches(CheatManager* const manager, ClownMDEmu* const clownmdemu)
 {
 	unsigned int i;
 
-	for (i = 0; i < total_cheats; ++i)
-		if (cheats[i].enabled && Cheat_IsRAMCheat(&cheats[i].code))
-			clownmdemu->state.m68k.ram[(cheats[i].code.address / 2) % CC_COUNT_OF(clownmdemu->state.m68k.ram)] = cheats[i].code.value;
+	for (i = 0; i < manager->total_cheats; ++i)
+		if (manager->cheats[i].enabled && CheatManager_IsRAMCheat(&manager->cheats[i].code))
+			clownmdemu->state.m68k.ram[(manager->cheats[i].code.address / 2) % CC_COUNT_OF(clownmdemu->state.m68k.ram)] = manager->cheats[i].code.value;
 }
 
-cc_bool Cheat_DecodeCheat(Cheat_DecodedCheat *const decoded_cheat, const char *const code)
+cc_bool CheatManager_DecodeCheat(CheatManager_DecodedCheat *const decoded_cheat, const char *const code)
 {
-	if (Cheat_DecodeGameGenie(decoded_cheat, code))
+	if (CheatManager_DecodeGameGenie(decoded_cheat, code))
 		return cc_true;
 
-	if (Cheat_DecodeActionReplay(decoded_cheat, code))
+	if (CheatManager_DecodeActionReplay(decoded_cheat, code))
 		return cc_true;
 
 	/*libretro_callbacks.log(RETRO_LOG_ERROR, "Cheat code '%s' is in an unrecognised format.\n", code);*/
 	return cc_false;
 }
 
-void Cheat_ResetCheats(cc_u16l* const rom, const size_t rom_length)
+void CheatManager_ResetCheats(CheatManager* const manager, cc_u16l* const rom, const size_t rom_length)
 {
-	Cheat_UndoROMPatches(rom, rom_length);
-	memset(&cheats, 0, sizeof(cheats));
-	total_cheats = 0;
+	CheatManager_UndoROMPatches(manager, rom, rom_length);
+	memset(&manager->cheats, 0, sizeof(manager->cheats));
+	manager->total_cheats = 0;
 }
 
-cc_bool Cheat_AddDecodedCheat(cc_u16l* const rom, const size_t rom_length, const unsigned int index, const cc_bool enabled, const Cheat_DecodedCheat* const decoded_cheat)
+cc_bool CheatManager_AddDecodedCheat(CheatManager* const manager, cc_u16l* const rom, const size_t rom_length, const unsigned int index, const cc_bool enabled, const CheatManager_DecodedCheat* const decoded_cheat)
 {
-	if (index >= CC_COUNT_OF(cheats))
+	if (index >= CC_COUNT_OF(manager->cheats))
 	{
 		/*libretro_callbacks.log(RETRO_LOG_ERROR, "Cheat code %u (%s) has an index which exceeds the size of the cheat code buffer (%lu)!\n", index, code, (unsigned long)CC_COUNT_OF(cheats));*/
 		return cc_false;
@@ -264,27 +255,27 @@ cc_bool Cheat_AddDecodedCheat(cc_u16l* const rom, const size_t rom_length, const
 		return cc_false;
 	}
 
-	Cheat_UndoROMPatches(rom, rom_length);
+	CheatManager_UndoROMPatches(manager, rom, rom_length);
 
 	/* Code is valid; add to the list. */
-	cheats[index].code = *decoded_cheat;
-	cheats[index].enabled = enabled;
+	manager->cheats[index].code = *decoded_cheat;
+	manager->cheats[index].enabled = enabled;
 
-	total_cheats = CC_MIN(total_cheats, index);
+	manager->total_cheats = CC_MIN(manager->total_cheats, index);
 
-	Cheat_ApplyROMPatches(rom, rom_length);
+	CheatManager_ApplyROMPatches(manager, rom, rom_length);
 
 	return cc_true;
 }
 
-cc_bool Cheat_AddCheat(cc_u16l *const rom, const size_t rom_length, const unsigned int index, const cc_bool enabled, const char* const code)
+cc_bool CheatManager_AddCheat(CheatManager* const manager, cc_u16l *const rom, const size_t rom_length, const unsigned int index, const cc_bool enabled, const char* const code)
 {
-	Cheat_DecodedCheat decoded_cheat;
+	CheatManager_DecodedCheat decoded_cheat;
 
-	if (!Cheat_DecodeCheat(&decoded_cheat, code))
+	if (!CheatManager_DecodeCheat(&decoded_cheat, code))
 		return cc_false;
 
 	/*libretro_callbacks.log(RETRO_LOG_INFO, "Cheat code %u (%s) decoded to '%06lX-%04X'.\n", index, code, decoded_cheat.address, decoded_cheat.value);*/
 
-	return Cheat_AddDecodedCheat(rom, rom_length, index, enabled, &decoded_cheat);
+	return CheatManager_AddDecodedCheat(manager, rom, rom_length, index, enabled, &decoded_cheat);
 }
