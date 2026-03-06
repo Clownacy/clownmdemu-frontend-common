@@ -261,7 +261,7 @@ cc_bool CheatManager_AddDecodedCheat(CheatManager* const manager, cc_u16l* const
 	manager->cheats[index].code = *decoded_cheat;
 	manager->cheats[index].enabled = enabled;
 
-	manager->total_cheats = CC_MAX(manager->total_cheats, index);
+	manager->total_cheats = CC_MAX(manager->total_cheats, index + 1);
 
 	CheatManager_ApplyROMPatches(manager, rom, rom_length);
 
