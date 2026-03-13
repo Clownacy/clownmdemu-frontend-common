@@ -1,8 +1,8 @@
 #ifndef CLOWNMDEMU_FRONTEND_COMMON_CHEAT_H
 #define CLOWNMDEMU_FRONTEND_COMMON_CHEAT_H
 
-#include "core/clowncommon/clowncommon.h"
-#include "core/clownmdemu.h"
+#include "core/libraries/clowncommon/clowncommon.h"
+#include "core/source/clownmdemu.h"
 
 typedef struct CheatManager_DecodedCheat
 {

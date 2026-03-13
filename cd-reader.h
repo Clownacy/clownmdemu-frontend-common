@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#include "clowncd/clowncd.h"
+#include "clowncd/source/clowncd.h"
 
 #define CDREADER_SECTOR_SIZE 2048
 
